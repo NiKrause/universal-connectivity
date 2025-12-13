@@ -1,5 +1,5 @@
-import { Libp2p } from 'libp2p'
-import { Message } from '@libp2p/interface-pubsub'
+import type { Message } from '@libp2p/interface'
+import type { Libp2pType } from '@/context/ctx'
 import { v4 as uuidv4 } from 'uuid'
 import { CommandRequest, CommandResponse } from './extension-types'
 
@@ -16,7 +16,7 @@ function getExtensionCommandTopic(extensionId: string): string {
  * Extension command protocol - handles command execution via pubsub
  */
 export class ExtensionProtocol {
-  private libp2p: Libp2p
+  private libp2p: Libp2pType
   private pendingRequests: Map<string, {
     resolve: (response: CommandResponse) => void
     reject: (error: Error) => void
@@ -24,7 +24,7 @@ export class ExtensionProtocol {
   }> = new Map()
   private subscribedTopics: Set<string> = new Set()
 
-  constructor(libp2p: Libp2p) {
+  constructor(libp2p: Libp2pType) {
     this.libp2p = libp2p
   }
 

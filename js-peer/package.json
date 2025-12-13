@@ -13,6 +13,7 @@
     "@chainsafe/libp2p-gossipsub": "^14.1.0",
     "@chainsafe/libp2p-noise": "^16.0.3",
     "@chainsafe/libp2p-yamux": "^7.0.1",
+    "@download/blockies": "^1.0.3",
     "@headlessui/react": "^2.0.1",
     "@helia/delegated-routing-v1-http-api-client": "^4.1.1",
     "@heroicons/react": "^2.1.3",

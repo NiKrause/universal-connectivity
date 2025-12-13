@@ -1,18 +1,12 @@
 import { useLibp2pContext } from '@/context/ctx'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Message } from '@libp2p/interface-pubsub'
-import { CHAT_FILE_TOPIC, CHAT_TOPIC, FILE_EXCHANGE_PROTOCOL } from '@/lib/constants'
+import { CHAT_FILE_TOPIC, CHAT_TOPIC } from '@/lib/constants'
 import { createIcon } from '@download/blockies'
-import { ChatMessage, useChatContext } from '../context/chat-ctx'
+import { ChatFile, ChatMessage, useChatContext } from '../context/chat-ctx'
 import { v4 as uuidv4 } from 'uuid';
-import { ChatFile, useFileChatContext } from '@/context/file-ctx'
 import { useExtensionContext } from '@/context/extension-ctx'
 import { isCommand, parseCommand, isValidCommand } from '@/lib/command-parser'
-import { pipe } from 'it-pipe'
-import map from 'it-map'
-import { fromString as uint8ArrayFromString } from 'uint8arrays/from-string'
-import { toString as uint8ArrayToString } from 'uint8arrays/to-string'
-import * as lp from 'it-length-prefixed'
+import InstalledExtensions from './installed-extensions'
 
 interface MessageProps extends ChatMessage { }
 
@@ -41,7 +35,7 @@ function Message({ msg, fileObjectUrl, from, peerId }: MessageProps) {
 
         className="flex relative max-w-xl px-4 py-2 text-gray-700 rounded shadow bg-white"
       >
-        <div className="block">
+        <div className="block whitespace-pre-wrap">
           {msg}
           <p>{fileObjectUrl ? <a href={fileObjectUrl} target="_blank"><b>Download</b></a> : ""}</p>
           <p className="italic text-gray-400">{peerId !== libp2p.peerId.toString() ? `from: ${peerId.slice(-4)}` : null} </p>
@@ -53,102 +47,63 @@ function Message({ msg, fileObjectUrl, from, peerId }: MessageProps) {
 
 export default function ChatContainer() {
   const { libp2p } = useLibp2pContext()
-  const { messageHistory, setMessageHistory } = useChatContext();
-  const { files, setFiles } = useFileChatContext();
+  const { messageHistory, setMessageHistory, files, setFiles } = useChatContext();
   const { executeCommand, isInstalled } = useExtensionContext();
   const [input, setInput] = useState<string>('')
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Effect hook to subscribe to pubsub events and update the message state hook
-  useEffect(() => {
-    const messageCB = async (evt: CustomEvent<Message>) => {
-      console.log('gossipsub console log', evt.detail)
-      // FIXME: Why does 'from' not exist on type 'Message'?
-      const { topic, data } = evt.detail
+  // Handle extension icon click - send help command
+  const handleExtensionClick = useCallback(async (extensionId: string) => {
+    const helpCommand = `/${extensionId}-help`
+    const myPeerId = libp2p.peerId.toString()
 
-      switch (topic) {
-        case CHAT_TOPIC: {
-          chatMessageCB(evt, topic, data)
-          break
+    // Show command in chat
+    setMessageHistory(prev => [...prev, {
+      msgId: uuidv4(),
+      msg: helpCommand,
+      fileObjectUrl: undefined,
+      from: 'me',
+      peerId: myPeerId,
+      read: false,
+      receivedAt: Date.now(),
+    }])
+
+    // Execute help command
+    try {
+      const response = await executeCommand(extensionId, 'help', [])
+      
+      let responseMsg: string
+      if (response.success) {
+        if (response.data?.help) {
+          responseMsg = `✅\n${response.data.help}`
+        } else {
+          responseMsg = `✅ ${JSON.stringify(response.data, null, 2)}`
         }
-        case CHAT_FILE_TOPIC: {
-          chatFileMessageCB(evt, topic, data)
-          break
-        }
-        default: {
-          throw new Error(`Unexpected gossipsub topic: ${topic}`)
-        }
+      } else {
+        responseMsg = `❌ Error: ${response.error}`
       }
+      
+      setMessageHistory(prev => [...prev, {
+        msgId: uuidv4(),
+        msg: responseMsg,
+        fileObjectUrl: undefined,
+        from: 'extension',
+        peerId: extensionId,
+        read: false,
+        receivedAt: Date.now(),
+      }])
+    } catch (error: any) {
+      setMessageHistory(prev => [...prev, {
+        msgId: uuidv4(),
+        msg: `❌ Command failed: ${error.message}`,
+        fileObjectUrl: undefined,
+        from: 'system',
+        peerId: 'system',
+        read: false,
+        receivedAt: Date.now(),
+      }])
     }
-
-    const chatMessageCB = (evt: CustomEvent<Message>, topic: string, data: Uint8Array) => {
-      const msg = new TextDecoder().decode(data)
-      console.log(`${topic}: ${msg}`)
-
-      // Append signed messages, otherwise discard
-      if (evt.detail.type === 'signed') {
-        setMessageHistory([...messageHistory, { msg, fileObjectUrl: undefined, from: 'other', peerId: evt.detail.from.toString() }])
-      }
-    }
-
-    const chatFileMessageCB = async (evt: CustomEvent<Message>, topic: string, data: Uint8Array) => {
-      const fileId = new TextDecoder().decode(data)
-
-      // if the message isn't signed, discard it.
-      if (evt.detail.type !== 'signed') {
-        return
-      }
-      const senderPeerId = evt.detail.from;
-
-      const stream = await libp2p.dialProtocol(senderPeerId, FILE_EXCHANGE_PROTOCOL)
-      await pipe(
-        [uint8ArrayFromString(fileId)],
-        (source) => lp.encode(source),
-        stream,
-        (source) => lp.decode(source),
-        async function(source) {
-          for await (const data of source) {
-            const body: Uint8Array = data.subarray()
-            console.log(`request_response: response received: size:${body.length}`)
-
-            const msg: ChatMessage = {
-              msg: newChatFileMessage(fileId, body),
-              fileObjectUrl: window.URL.createObjectURL(new Blob([body])),
-              from: 'other',
-              peerId: senderPeerId.toString(),
-            }
-            setMessageHistory([...messageHistory, msg])
-          }
-        }
-      )
-    }
-
-    libp2p.services.pubsub.addEventListener('message', messageCB)
-
-    libp2p.handle(FILE_EXCHANGE_PROTOCOL, ({ stream }) => {
-      pipe(
-        stream.source,
-        (source) => lp.decode(source),
-        (source) => map(source, async (msg) => {
-          const fileId = uint8ArrayToString(msg.subarray())
-          const file = files.get(fileId)!
-          return file.body
-        }),
-        (source) => lp.encode(source),
-        stream.sink,
-      )
-    })
-
-    return () => {
-      (async () => {
-        // Cleanup handlers 👇
-        // libp2p.services.pubsub.unsubscribe(CHAT_TOPIC)
-        // libp2p.services.pubsub.unsubscribe(CHAT_FILE_TOPIC)
-        libp2p.services.pubsub.removeEventListener('message', messageCB)
-        await libp2p.unhandle(FILE_EXCHANGE_PROTOCOL)
-      })();
-    }
-  }, [libp2p, messageHistory, setMessageHistory])
+  }, [libp2p, setMessageHistory, executeCommand])
 
   const sendMessage = useCallback(async () => {
     if (input === '') return
@@ -162,10 +117,13 @@ export default function ChatContainer() {
       if (!isValidCommand(parsed)) {
         // Show error message in chat
         setMessageHistory([...messageHistory, {
+          msgId: uuidv4(),
           msg: `❌ Invalid command syntax. Commands should be like: /extension-command args`,
           fileObjectUrl: undefined,
           from: 'system',
-          peerId: 'system'
+          peerId: 'system',
+          read: false,
+          receivedAt: Date.now(),
         }])
         setInput('')
         return
@@ -174,10 +132,13 @@ export default function ChatContainer() {
       // Check if extension is installed
       if (!isInstalled(parsed.extensionId)) {
         setMessageHistory([...messageHistory, {
+          msgId: uuidv4(),
           msg: `❌ Extension '${parsed.extensionId}' is not installed`,
           fileObjectUrl: undefined,
           from: 'system',
-          peerId: 'system'
+          peerId: 'system',
+          read: false,
+          receivedAt: Date.now(),
         }])
         setInput('')
         return
@@ -185,10 +146,13 @@ export default function ChatContainer() {
 
       // Show command in chat
       setMessageHistory([...messageHistory, {
+        msgId: uuidv4(),
         msg: input,
         fileObjectUrl: undefined,
         from: 'me',
-        peerId: myPeerId
+        peerId: myPeerId,
+        read: false,
+        receivedAt: Date.now(),
       }])
 
       // Execute command
@@ -196,22 +160,36 @@ export default function ChatContainer() {
         const response = await executeCommand(parsed.extensionId, parsed.command, parsed.args)
         
         // Show response in chat
-        const responseMsg = response.success
-          ? `✅ ${JSON.stringify(response.data, null, 2)}`
-          : `❌ Error: ${response.error}`
+        let responseMsg: string
+        if (response.success) {
+          // Check if response has a help field (for help commands)
+          if (response.data?.help) {
+            responseMsg = `✅\n${response.data.help}`
+          } else {
+            responseMsg = `✅ ${JSON.stringify(response.data, null, 2)}`
+          }
+        } else {
+          responseMsg = `❌ Error: ${response.error}`
+        }
         
         setMessageHistory(prev => [...prev, {
+          msgId: uuidv4(),
           msg: responseMsg,
           fileObjectUrl: undefined,
           from: 'extension',
-          peerId: parsed.extensionId
+          peerId: parsed.extensionId,
+          read: false,
+          receivedAt: Date.now(),
         }])
       } catch (error: any) {
         setMessageHistory(prev => [...prev, {
+          msgId: uuidv4(),
           msg: `❌ Command failed: ${error.message}`,
           fileObjectUrl: undefined,
           from: 'system',
-          peerId: 'system'
+          peerId: 'system',
+          read: false,
+          receivedAt: Date.now(),
         }])
       }
       
@@ -234,7 +212,7 @@ export default function ChatContainer() {
       res.recipients.map((peerId) => peerId.toString()),
     )
 
-    setMessageHistory([...messageHistory, { msg: input, fileObjectUrl: undefined, from: 'me', peerId: myPeerId }])
+    setMessageHistory([...messageHistory, { msgId: uuidv4(), msg: input, fileObjectUrl: undefined, from: 'me', peerId: myPeerId, read: false, receivedAt: Date.now() }])
     setInput('')
   }, [input, messageHistory, setInput, libp2p, setMessageHistory, executeCommand, isInstalled])
 
@@ -264,13 +242,16 @@ export default function ChatContainer() {
     )
 
     const msg: ChatMessage = {
+      msgId: uuidv4(),
       msg: newChatFileMessage(file.id, file.body),
       fileObjectUrl: window.URL.createObjectURL(new Blob([file.body])),
       from: 'me',
       peerId: myPeerId,
+      read: false,
+      receivedAt: Date.now(),
     }
     setMessageHistory([...messageHistory, msg])
-  }, [messageHistory, libp2p, setMessageHistory])
+  }, [messageHistory, libp2p, setMessageHistory, files, setFiles])
 
   const newChatFileMessage = (id: string, body: Uint8Array) => {
     return `File: ${id} (${body.length} bytes)`
@@ -338,12 +319,13 @@ export default function ChatContainer() {
               <span className="block ml-2 font-bold text-gray-600">
                 Public Chat
               </span>
+              <InstalledExtensions onExtensionClick={handleExtensionClick} />
             </div>
             <div className="relative w-full flex flex-col-reverse p-6 overflow-y-auto h-[40rem] bg-gray-100">
               <ul className="space-y-2">
                 {/* messages start */}
-                {messageHistory.map(({ msg, fileObjectUrl, from, peerId }, idx) => (
-                  <Message key={idx} msg={msg} fileObjectUrl={fileObjectUrl} from={from} peerId={peerId} />
+                {messageHistory.map((message, idx) => (
+                  <Message key={idx} {...message} />
                 ))}
                 {/* messages end */}
               </ul>

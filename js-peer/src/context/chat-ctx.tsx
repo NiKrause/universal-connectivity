@@ -23,6 +23,7 @@ export interface ChatMessage {
   msg: string
   fileObjectUrl: string | undefined
   peerId: string
+  from: 'me' | 'other' | 'system' | 'extension'
   read: boolean
   receivedAt: number
 }
@@ -108,6 +109,7 @@ export const ChatProvider = ({ children }: any) => {
           msg,
           fileObjectUrl: undefined,
           peerId: evt.detail.from.toString(),
+          from: 'other',
           read: false,
           receivedAt: Date.now(),
         },
@@ -144,6 +146,7 @@ export const ChatProvider = ({ children }: any) => {
               msg: newChatFileMessage(fileId, body),
               fileObjectUrl: window.URL.createObjectURL(new Blob([body])),
               peerId: senderPeerId.toString(),
+              from: 'other',
               read: false,
               receivedAt: Date.now(),
             }
@@ -170,6 +173,7 @@ export const ChatProvider = ({ children }: any) => {
         msgId: crypto.randomUUID(),
         fileObjectUrl: undefined,
         peerId: peerId,
+        from: 'other',
         receivedAt: Date.now(),
       }
 

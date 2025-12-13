@@ -1,5 +1,5 @@
-import { Libp2p } from 'libp2p'
-import { Message } from '@libp2p/interface-pubsub'
+import type { Message } from '@libp2p/interface'
+import type { Libp2pType } from '@/context/ctx'
 import { EXTENSION_DISCOVERY_TOPIC } from './constants'
 import {
   ExtensionManifest,
@@ -15,12 +15,12 @@ const MAX_OFFERS = 10
  * Manages extension discovery, installation, and lifecycle
  */
 export class ExtensionManager {
-  private libp2p: Libp2p
+  private libp2p: Libp2pType
   private offers: Map<string, ExtensionOffer> = new Map()
   private installed: Map<string, InstalledExtension> = new Map()
   private listeners: Set<() => void> = new Set()
 
-  constructor(libp2p: Libp2p) {
+  constructor(libp2p: Libp2pType) {
     this.libp2p = libp2p
     this.loadInstalledFromStorage()
   }
