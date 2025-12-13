@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { startLibp2p } from '../lib/libp2p'
 import { ChatProvider } from './chat-ctx'
+import { PeerProvider } from './peer-ctx'
+import { ListenAddressesProvider } from './listen-addresses-ctx'
+import { ExtensionContextProvider } from './extension-ctx'
 import type { Libp2p, PubSub } from '@libp2p/interface'
 import type { Identify } from '@libp2p/identify'
 import type { DirectMessage } from '@/lib/direct-message'
@@ -58,7 +61,15 @@ export function AppWrapper({ children }: WrapperProps) {
 
   return (
     <libp2pContext.Provider value={{ libp2p }}>
-      <ChatProvider>{children}</ChatProvider>
+      <ExtensionContextProvider>
+        <ChatProvider>
+          <PeerProvider>
+            <ListenAddressesProvider>
+              {children}
+            </ListenAddressesProvider>
+          </PeerProvider>
+        </ChatProvider>
+      </ExtensionContextProvider>
     </libp2pContext.Provider>
   )
 }
