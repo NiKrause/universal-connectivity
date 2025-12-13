@@ -1,6 +1,7 @@
 import Head from 'next/head'
 import Nav from '@/components/nav'
 import ChatContainer from '@/components/chat'
+import ExtensionOfferBanner from '@/components/extension-offer-banner'
 
 export default function Chat() {
   return (
@@ -13,6 +14,7 @@ export default function Chat() {
       </Head>
       <main className="min-h-full">
         <Nav />
+        <ExtensionOfferBanner />
         <div className="">
           <main>
             <ChatContainer />

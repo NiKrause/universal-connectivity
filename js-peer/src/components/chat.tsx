@@ -6,6 +6,8 @@ import { createIcon } from '@download/blockies'
 import { ChatMessage, useChatContext } from '../context/chat-ctx'
 import { v4 as uuidv4 } from 'uuid';
 import { ChatFile, useFileChatContext } from '@/context/file-ctx'
+import { useExtensionContext } from '@/context/extension-ctx'
+import { isCommand, parseCommand, isValidCommand } from '@/lib/command-parser'
 import { pipe } from 'it-pipe'
 import map from 'it-map'
 import { fromString as uint8ArrayFromString } from 'uint8arrays/from-string'
@@ -53,6 +55,7 @@ export default function ChatContainer() {
   const { libp2p } = useLibp2pContext()
   const { messageHistory, setMessageHistory } = useChatContext();
   const { files, setFiles } = useFileChatContext();
+  const { executeCommand, isInstalled } = useExtensionContext();
   const [input, setInput] = useState<string>('')
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -150,6 +153,73 @@ export default function ChatContainer() {
   const sendMessage = useCallback(async () => {
     if (input === '') return
 
+    const myPeerId = libp2p.peerId.toString()
+
+    // Check if input is an extension command
+    if (isCommand(input)) {
+      const parsed = parseCommand(input)
+      
+      if (!isValidCommand(parsed)) {
+        // Show error message in chat
+        setMessageHistory([...messageHistory, {
+          msg: `❌ Invalid command syntax. Commands should be like: /extension-command args`,
+          fileObjectUrl: undefined,
+          from: 'system',
+          peerId: 'system'
+        }])
+        setInput('')
+        return
+      }
+
+      // Check if extension is installed
+      if (!isInstalled(parsed.extensionId)) {
+        setMessageHistory([...messageHistory, {
+          msg: `❌ Extension '${parsed.extensionId}' is not installed`,
+          fileObjectUrl: undefined,
+          from: 'system',
+          peerId: 'system'
+        }])
+        setInput('')
+        return
+      }
+
+      // Show command in chat
+      setMessageHistory([...messageHistory, {
+        msg: input,
+        fileObjectUrl: undefined,
+        from: 'me',
+        peerId: myPeerId
+      }])
+
+      // Execute command
+      try {
+        const response = await executeCommand(parsed.extensionId, parsed.command, parsed.args)
+        
+        // Show response in chat
+        const responseMsg = response.success
+          ? `✅ ${JSON.stringify(response.data, null, 2)}`
+          : `❌ Error: ${response.error}`
+        
+        setMessageHistory(prev => [...prev, {
+          msg: responseMsg,
+          fileObjectUrl: undefined,
+          from: 'extension',
+          peerId: parsed.extensionId
+        }])
+      } catch (error: any) {
+        setMessageHistory(prev => [...prev, {
+          msg: `❌ Command failed: ${error.message}`,
+          fileObjectUrl: undefined,
+          from: 'system',
+          peerId: 'system'
+        }])
+      }
+      
+      setInput('')
+      return
+    }
+
+    // Regular chat message
     console.log(
       `peers in gossip for topic ${CHAT_TOPIC}:`,
       libp2p.services.pubsub.getSubscribers(CHAT_TOPIC).toString(),
@@ -164,11 +234,9 @@ export default function ChatContainer() {
       res.recipients.map((peerId) => peerId.toString()),
     )
 
-    const myPeerId = libp2p.peerId.toString()
-
     setMessageHistory([...messageHistory, { msg: input, fileObjectUrl: undefined, from: 'me', peerId: myPeerId }])
     setInput('')
-  }, [input, messageHistory, setInput, libp2p, setMessageHistory])
+  }, [input, messageHistory, setInput, libp2p, setMessageHistory, executeCommand, isInstalled])
 
   const sendFile = useCallback(async (readerEvent: ProgressEvent<FileReader>) => {
     const fileBody = readerEvent.target?.result as ArrayBuffer;
