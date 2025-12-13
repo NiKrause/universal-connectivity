@@ -8,3 +8,6 @@ yarn.lock
 .vscode/
 .DS_Store
 go-peer/go-peer
+**/.idea
+nim-peer/nim_peer
+nim-peer/local.*
