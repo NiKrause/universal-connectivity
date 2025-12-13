@@ -26,3 +26,6 @@ tokio-util = { version = "0.7.14", features = ["full"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 unsigned-varint = "0.8.0"
+
+[build-dependencies]
+prost-build = "0.13"
