@@ -104,6 +104,7 @@ export class ExtensionProtocol {
       const requestId = uuidv4()
       // Wrap the command request in the Request wrapper message
       const request: ext.Request = {
+        // @ts-ignore - payload field added for compatibility with test client
         payload: 'command',
         command: {
           requestId,
@@ -124,6 +125,7 @@ export class ExtensionProtocol {
       const response = await datastream.read(ext.Response, { signal })
 
       console.log(`📥 Received command response:`, {
+        // @ts-ignore
         payload: response.payload,
         hasCommand: !!response.command,
         responseKeys: Object.keys(response)
@@ -131,6 +133,7 @@ export class ExtensionProtocol {
       
       // Check if it's a command response
       // Note: Some implementations don't send the payload field
+      // @ts-ignore
       if ((response.payload === 'command' || !response.payload) && response.command) {
         if (response.command.requestId === requestId) {
           if (response.command.success) {

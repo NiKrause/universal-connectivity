@@ -1,6 +1,8 @@
 # Universal Connectivity
 
-Realtime highly decentralised chat app.
+Realtime highly decentralised chat app with extension protocol support.
+
+**🌐 Live Demo:** https://dweb.link/ipfs/bafybeiesr6wwz5boxhw3fwn5pdj2bgccsikci2ssklwdp6lao23vfsafmm
 
 ![libp2p topology](libp2p-hero.svg)
 
@@ -32,6 +34,41 @@ Some of the cool and cutting-edge [transport protocols](https://connectivity.lib
 ❌ - Protocol not supported
 
 - Uses the [**GossipSub**](https://docs.libp2p.io/concepts/pubsub/overview/) PubSub protocol for decentralised messaging
+
+## UC Extension Protocol (UCEP)
+
+The Universal Connectivity Extension Protocol enables peer-to-peer apps to discover and interact with extensions running on other peers. Apps can dynamically discover available functionality from connected peers and execute commands without knowing about extensions beforehand.
+
+### How it works
+
+1. **Discovery**: Peers advertise extensions via libp2p identify protocol with custom protocol IDs: `/uc/extension/{extensionId}/{version}`
+2. **Manifest Exchange**: Peers request extension manifests containing metadata, commands, and UI URLs
+3. **Command Execution**: Execute commands on remote extensions via protobuf-encoded messages over direct streams
+4. **User Installation**: Users can install extensions from peers and access their functionality through the chat interface
+
+### Demo Video
+
+[![UC Extension Protocol Demo](https://img.youtube.com/vi/CtKYDoA6A7I/maxresdefault.jpg)](https://youtu.be/CtKYDoA6A7I)
+
+*Watch the demo showing a collaborative spreadsheet extension in action*
+
+### Reference Implementation
+
+See the [spreadsheet example](https://github.com/NiKrause/js-libp2p-examples/tree/uc-extensions-service/examples/js-libp2p-example-yjs-libp2p) for a complete implementation of UCEP. This example shows:
+- Extension service setup with topology tracking
+- Manifest and command request handling  
+- Integration with a Yjs collaborative spreadsheet
+- Direct stream communication using pbStream
+
+### Build Your Own Extension
+
+Any app can implement UCEP! Examples:
+- **Todo apps**: Share and sync tasks across peers
+- **File sharing**: Discover and request files from peers
+- **Games**: Find and join multiplayer sessions
+- **Collaborative tools**: Real-time document editing, whiteboards
+
+The protocol is transport-agnostic and works over any libp2p connection (WebRTC, WebTransport, QUIC, TCP).
 
 ## Connecting to a peer
 

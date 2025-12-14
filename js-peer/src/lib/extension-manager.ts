@@ -148,6 +148,7 @@ export class ExtensionManager {
     try {
       // Wrap the manifest request in the Request wrapper message
       const request: ext.Request = {
+        // @ts-ignore - payload field added for compatibility with test client
         payload: 'manifest',
         manifest: {
           timestamp: BigInt(Date.now()),
@@ -165,6 +166,7 @@ export class ExtensionManager {
 
       console.log(`📥 ExtensionManager: RAW manifest response received:`, response)
       console.log(`📥 ExtensionManager: Response structure:`, {
+        // @ts-ignore
         payload: response.payload,
         hasManifest: !!response.manifest,
         manifestKeys: response.manifest ? Object.keys(response.manifest) : [],
@@ -177,6 +179,7 @@ export class ExtensionManager {
       
       // Check if it's a manifest response
       // Note: Some implementations don't send the payload field, so we check for manifest presence
+      // @ts-ignore
       if ((response.payload === 'manifest' || !response.payload) && response.manifest?.manifest) {
         const manifestData = response.manifest.manifest
         
