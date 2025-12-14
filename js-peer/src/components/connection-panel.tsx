@@ -215,36 +215,38 @@ export default function ConnectionPanel({ isOpen, onClose }: { isOpen: boolean; 
             {err && <p className="mt-2 text-sm text-red-500">{err}</p>}
           </div>
 
-          {connections.length > 0 && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <div
-                className="flex justify-between items-center cursor-pointer hover:bg-gray-100 p-2 rounded transition-colors"
-                onClick={toggleConnections}
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <div
+              className="flex justify-between items-center cursor-pointer hover:bg-gray-100 p-2 rounded transition-colors"
+              onClick={toggleConnections}
+            >
+              <h3 className="text-sm font-medium text-gray-900">Connections ({connections.length}):</h3>
+              <button
+                type="button"
+                className="text-gray-500 hover:text-gray-700"
+                aria-expanded={connectionsExpanded}
+                aria-label={connectionsExpanded ? 'Collapse connections' : 'Expand connections'}
               >
-                <h3 className="text-sm font-medium text-gray-900">Connections ({connections.length}):</h3>
-                <button
-                  type="button"
-                  className="text-gray-500 hover:text-gray-700"
-                  aria-expanded={connectionsExpanded}
-                  aria-label={connectionsExpanded ? 'Collapse connections' : 'Expand connections'}
-                >
-                  {connectionsExpanded ? (
-                    <ChevronUpIcon className="h-5 w-5" aria-hidden="true" />
-                  ) : (
-                    <ChevronDownIcon className="h-5 w-5" aria-hidden="true" />
-                  )}
-                </button>
-              </div>
-              {connectionsExpanded && (
-                <div className="mt-2 max-h-60 overflow-y-auto bg-white rounded border border-gray-200 p-2">
-                  <PeerList connections={connections} />
-                </div>
-              )}
-              {!connectionsExpanded && (
-                <p className="mt-2 text-xs text-gray-500 italic">Click to show {connections.length} connections</p>
-              )}
+                {connectionsExpanded ? (
+                  <ChevronUpIcon className="h-5 w-5" aria-hidden="true" />
+                ) : (
+                  <ChevronDownIcon className="h-5 w-5" aria-hidden="true" />
+                )}
+              </button>
             </div>
-          )}
+            {connectionsExpanded && (
+              <div className="mt-2 max-h-60 overflow-y-auto bg-white rounded border border-gray-200 p-2">
+                {connections.length === 0 ? (
+                  <p className="p-2 text-sm text-gray-500 italic">No active connections</p>
+                ) : (
+                  <PeerList connections={connections} />
+                )}
+              </div>
+            )}
+            {!connectionsExpanded && connections.length > 0 && (
+              <p className="mt-2 text-xs text-gray-500 italic">Click to show {connections.length} connections</p>
+            )}
+          </div>
         </div>
       </DialogBody>
     </Dialog>

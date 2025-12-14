@@ -45,7 +45,10 @@ export default function ExtensionOfferBanner() {
                   {offer.manifest.description}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  From: ...{offer.publisherPeerId.slice(-8)}
+                  {offer.peerIds.length === 1 
+                    ? `From: ...${offer.peerIds[0].slice(-8)}`
+                    : `From ${offer.peerIds.length} peers`
+                  }
                 </p>
                 {offer.manifest.commands && offer.manifest.commands.length > 0 && (
                   <p className="text-xs text-gray-600 mt-1">

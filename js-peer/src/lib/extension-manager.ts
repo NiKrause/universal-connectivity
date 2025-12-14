@@ -1,122 +1,234 @@
-import type { Message } from '@libp2p/interface'
 import type { Libp2pType } from '@/context/ctx'
-import { EXTENSION_DISCOVERY_TOPIC } from './constants'
+import type { IdentifyResult } from '@libp2p/interface'
+import { peerIdFromString } from '@libp2p/peer-id'
+import { pbStream } from 'it-protobuf-stream'
+import { EXTENSION_PROTOCOL_PREFIX } from './constants'
+import { ext } from './protobuf/extension'
 import {
   ExtensionManifest,
   ExtensionOffer,
   InstalledExtension,
-  ExtensionDiscoveryMessage,
+  parseExtensionProtocol,
 } from './extension-types'
 
 const STORAGE_KEY = 'uc-installed-extensions'
-const MAX_OFFERS = 10
+const MANIFEST_TIMEOUT = 5000 // 5 seconds
 
 /**
- * Manages extension discovery, installation, and lifecycle
+ * Manages extension discovery via identify protocol and installation lifecycle
  */
 export class ExtensionManager {
   private libp2p: Libp2pType
   private offers: Map<string, ExtensionOffer> = new Map()
   private installed: Map<string, InstalledExtension> = new Map()
   private listeners: Set<() => void> = new Set()
+  private boundHandleIdentify: (evt: CustomEvent<IdentifyResult>) => void
 
   constructor(libp2p: Libp2pType) {
     this.libp2p = libp2p
+    this.boundHandleIdentify = this.handleIdentify.bind(this)
     this.loadInstalledFromStorage()
   }
 
   /**
-   * Initialize the extension manager - subscribe to discovery topic
+   * Initialize the extension manager - listen for peer:identify events
    */
   async start(): Promise<void> {
-    try {
-      await this.libp2p.services.pubsub.subscribe(EXTENSION_DISCOVERY_TOPIC)
-      this.libp2p.services.pubsub.addEventListener('message', this.handleMessage.bind(this))
-      console.log('✅ ExtensionManager: Subscribed to discovery topic')
-    } catch (error) {
-      console.error('Failed to subscribe to extension discovery topic:', error)
-      throw error
+    // Listen for identify events from connected peers
+    this.libp2p.addEventListener('peer:identify', this.boundHandleIdentify)
+    console.log('✅ ExtensionManager: Listening for peer:identify events')
+
+    // Check already connected peers
+    const connections = this.libp2p.getConnections()
+    for (const conn of connections) {
+      const peerId = conn.remotePeer.toString()
+      try {
+        // Get protocols for this peer
+        const peerInfo = await this.libp2p.peerStore.get(conn.remotePeer)
+        if (peerInfo?.protocols) {
+          this.processProtocols(peerId, peerInfo.protocols)
+        }
+      } catch (e) {
+        // Peer info not available yet
+      }
     }
   }
 
   /**
-   * Stop the extension manager - unsubscribe from discovery topic
+   * Stop the extension manager
    */
   async stop(): Promise<void> {
-    try {
-      this.libp2p.services.pubsub.removeEventListener('message', this.handleMessage.bind(this))
-      // Note: We don't unsubscribe because libp2p might be shutting down
-      console.log('✅ ExtensionManager: Stopped')
-    } catch (error) {
-      console.error('Failed to stop extension manager:', error)
-    }
+    this.libp2p.removeEventListener('peer:identify', this.boundHandleIdentify)
+    console.log('✅ ExtensionManager: Stopped')
   }
 
   /**
-   * Handle incoming pubsub messages on discovery topic
+   * Handle identify event when a peer is identified
    */
-  private handleMessage(evt: CustomEvent<Message>): void {
-    const { topic, data } = evt.detail
+  private handleIdentify(evt: CustomEvent<IdentifyResult>): void {
+    const { peerId, protocols } = evt.detail
+    const peerIdStr = peerId.toString()
 
-    // Only process messages from extension discovery topic
-    if (topic !== EXTENSION_DISCOVERY_TOPIC) {
-      return
-    }
+    console.log(`🔍 Peer identified: ${peerIdStr.slice(-8)} with ${protocols.length} protocols`)
 
-    // Only process signed messages
-    if (evt.detail.type !== 'signed') {
-      console.warn('ExtensionManager: Ignoring unsigned discovery message')
-      return
-    }
+    this.processProtocols(peerIdStr, protocols)
+  }
 
-    try {
-      const messageText = new TextDecoder().decode(data)
-      const message: ExtensionDiscoveryMessage = JSON.parse(messageText)
-
-      if (message.type === 'offer') {
-        this.handleExtensionOffer(message, evt.detail.from.toString())
+  /**
+   * Process protocols from a peer to find extension protocols
+   */
+  private processProtocols(peerId: string, protocols: string[]): void {
+    for (const protocol of protocols) {
+      if (protocol.startsWith(EXTENSION_PROTOCOL_PREFIX)) {
+        const parsed = parseExtensionProtocol(protocol)
+        if (parsed) {
+          console.log(`📦 Found extension protocol: ${parsed.extensionId} v${parsed.version} from ${peerId.slice(-8)}`)
+          this.handleExtensionDiscovery(peerId, parsed.extensionId, protocol)
+        }
       }
-    } catch (error) {
-      console.error('ExtensionManager: Failed to parse discovery message:', error)
     }
   }
 
   /**
-   * Handle an extension offer message
+   * Handle discovery of an extension from a peer
    */
-  private handleExtensionOffer(message: ExtensionDiscoveryMessage, publisherPeerId: string): void {
-    const { manifest } = message
-    
-    // Validate manifest
-    if (!this.isValidManifest(manifest)) {
-      console.warn('ExtensionManager: Invalid manifest received', manifest)
+  private async handleExtensionDiscovery(peerId: string, extensionId: string, protocol: string): Promise<void> {
+    // Check if we already have this peer for this extension
+    const existingOffer = this.offers.get(extensionId)
+    if (existingOffer) {
+      if (!existingOffer.peerIds.includes(peerId)) {
+        existingOffer.peerIds.push(peerId)
+        existingOffer.timestamp = Date.now()
+        console.log(`📦 Added peer ${peerId.slice(-8)} to extension: ${extensionId}`)
+        this.notifyListeners()
+      }
+      // Also update installed extension if exists
+      this.updateInstalledPeers(extensionId, peerId)
       return
     }
 
-    // Don't show offers for already installed extensions
-    if (this.isInstalled(manifest.id)) {
+    // Check if already installed - just update peers
+    if (this.isInstalled(extensionId)) {
+      this.updateInstalledPeers(extensionId, peerId)
       return
     }
 
-    const offer: ExtensionOffer = {
-      manifest,
-      timestamp: Date.now(),
-      publisherPeerId,
+    // Fetch manifest from this peer
+    try {
+      const manifest = await this.fetchManifest(peerId, protocol)
+      
+      if (!this.isValidManifest(manifest)) {
+        console.warn(`ExtensionManager: Invalid manifest from ${peerId.slice(-8)} for ${extensionId}`)
+        return
+      }
+
+      const offer: ExtensionOffer = {
+        manifest,
+        timestamp: Date.now(),
+        peerIds: [peerId],
+      }
+
+      this.offers.set(extensionId, offer)
+      console.log(`📦 New extension offer: ${manifest.name} (${extensionId}) from ${peerId.slice(-8)}`)
+      this.notifyListeners()
+    } catch (error) {
+      console.error(`Failed to fetch manifest from ${peerId.slice(-8)} for ${extensionId}:`, error)
     }
+  }
 
-    // Add to offers map (deduplicated by extension ID)
-    this.offers.set(manifest.id, offer)
+  /**
+   * Fetch manifest from a peer via direct stream
+   * Uses pbStream exactly like direct-message.ts
+   */
+  private async fetchManifest(peerId: string, protocol: string): Promise<ExtensionManifest> {
+    const pId = peerIdFromString(peerId)
+    const stream = await this.libp2p.dialProtocol(pId, protocol)
+    const datastream = pbStream(stream)
 
-    // Limit number of offers
-    if (this.offers.size > MAX_OFFERS) {
-      // Remove oldest offer
-      const oldestKey = Array.from(this.offers.entries())
-        .sort((a, b) => a[1].timestamp - b[1].timestamp)[0][0]
-      this.offers.delete(oldestKey)
+    try {
+      // Wrap the manifest request in the Request wrapper message
+      const request: ext.Request = {
+        payload: 'manifest',
+        manifest: {
+          timestamp: BigInt(Date.now()),
+        }
+      }
+
+      // Send request
+      console.log(`📤 Sending manifest request to ${peerId.slice(-8)}`)
+      const signal = AbortSignal.timeout(MANIFEST_TIMEOUT)
+      await datastream.write(request, ext.Request, { signal })
+
+      // Read response with timeout
+      console.log(`📤 ExtensionManager: Sending manifest request to ${peerId.slice(-8)}`)
+      const response = await datastream.read(ext.Response, { signal })
+
+      console.log(`📥 ExtensionManager: RAW manifest response received:`, response)
+      console.log(`📥 ExtensionManager: Response structure:`, {
+        payload: response.payload,
+        hasManifest: !!response.manifest,
+        manifestKeys: response.manifest ? Object.keys(response.manifest) : [],
+        hasNestedManifest: !!(response.manifest?.manifest),
+        responseKeys: Object.keys(response),
+        fullResponse: JSON.stringify(response, (key, value) =>
+          typeof value === 'bigint' ? value.toString() : value
+        )
+      })
+      
+      // Check if it's a manifest response
+      // Note: Some implementations don't send the payload field, so we check for manifest presence
+      if ((response.payload === 'manifest' || !response.payload) && response.manifest?.manifest) {
+        const manifestData = response.manifest.manifest
+        
+        console.log(`🔍 Manifest data:`, {
+          id: manifestData.id,
+          name: manifestData.name,
+          version: manifestData.version,
+          hasCommands: !!manifestData.commands,
+          commandsLength: manifestData.commands?.length
+        })
+        
+        // Convert protobuf manifest to our ExtensionManifest type
+        const converted = {
+          id: manifestData.id || '',
+          name: manifestData.name || '',
+          version: manifestData.version || '',
+          description: manifestData.description || '',
+          author: manifestData.author || '',
+          publicUrl: manifestData.publicUrl || '',
+          icon: manifestData.icon || '',
+          commands: (manifestData.commands || []).map(cmd => ({
+            name: cmd.name || '',
+            syntax: cmd.syntax || '',
+            description: cmd.description || '',
+          })),
+        }
+        
+        console.log(`✅ Manifest converted successfully:`, converted)
+        return converted
+      }
+      
+      console.error(`❌ Invalid manifest response structure`)
+      throw new Error('Invalid manifest response')
+    } finally {
+      try {
+        await stream.close({ signal: AbortSignal.timeout(5000) })
+      } catch (err: any) {
+        stream.abort(err)
+      }
     }
+  }
 
-    console.log(`📦 New extension offer: ${manifest.name} (${manifest.id})`)
-    this.notifyListeners()
+  /**
+   * Update peer list for installed extensions
+   */
+  private updateInstalledPeers(extensionId: string, peerId: string): void {
+    const installed = this.installed.get(extensionId)
+    if (installed && !installed.peerIds.includes(peerId)) {
+      installed.peerIds.push(peerId)
+      this.saveInstalledToStorage()
+      console.log(`📦 Added peer ${peerId.slice(-8)} to installed extension: ${extensionId}`)
+    }
   }
 
   /**
@@ -163,6 +275,7 @@ export class ExtensionManager {
       manifest: offer.manifest,
       installDate: Date.now(),
       enabled: true,
+      peerIds: [...offer.peerIds], // Copy all known peers
     }
 
     this.installed.set(extensionId, installedExtension)
@@ -171,7 +284,7 @@ export class ExtensionManager {
     // Remove from offers
     this.offers.delete(extensionId)
     
-    console.log(`✅ Installed extension: ${offer.manifest.name}`)
+    console.log(`✅ Installed extension: ${offer.manifest.name} with ${offer.peerIds.length} peer(s)`)
     this.notifyListeners()
     return true
   }
@@ -215,6 +328,57 @@ export class ExtensionManager {
   }
 
   /**
+   * Get peers for an extension (ordered: last successful first)
+   */
+  getExtensionPeers(extensionId: string): string[] {
+    const ext = this.installed.get(extensionId)
+    if (!ext) return []
+
+    // Ensure peerIds is an array (defensive for old storage format)
+    const peerIds = Array.isArray(ext.peerIds) ? ext.peerIds : []
+    const lastSuccessfulPeerId = ext.lastSuccessfulPeerId
+    
+    if (lastSuccessfulPeerId && peerIds.includes(lastSuccessfulPeerId)) {
+      return [lastSuccessfulPeerId, ...peerIds.filter(p => p !== lastSuccessfulPeerId)]
+    }
+    return [...peerIds]
+  }
+
+  /**
+   * Mark a peer as last successful for an extension
+   */
+  markPeerSuccess(extensionId: string, peerId: string): void {
+    const ext = this.installed.get(extensionId)
+    if (ext) {
+      ext.lastSuccessfulPeerId = peerId
+      this.saveInstalledToStorage()
+    }
+  }
+
+  /**
+   * Remove a peer from an extension (e.g., when peer disconnects)
+   */
+  removePeer(extensionId: string, peerId: string): void {
+    const ext = this.installed.get(extensionId)
+    if (ext) {
+      ext.peerIds = ext.peerIds.filter(p => p !== peerId)
+      if (ext.lastSuccessfulPeerId === peerId) {
+        ext.lastSuccessfulPeerId = undefined
+      }
+      this.saveInstalledToStorage()
+    }
+
+    const offer = this.offers.get(extensionId)
+    if (offer) {
+      offer.peerIds = offer.peerIds.filter(p => p !== peerId)
+      if (offer.peerIds.length === 0) {
+        this.offers.delete(extensionId)
+      }
+      this.notifyListeners()
+    }
+  }
+
+  /**
    * Enable/disable an extension
    */
   setExtensionEnabled(extensionId: string, enabled: boolean): boolean {
@@ -250,6 +414,14 @@ export class ExtensionManager {
       }
 
       const data: Array<[string, InstalledExtension]> = JSON.parse(stored)
+      
+      // Migrate old format: ensure peerIds is always an array
+      for (const [, ext] of data) {
+        if (!Array.isArray(ext.peerIds)) {
+          ext.peerIds = []
+        }
+      }
+      
       this.installed = new Map(data)
       console.log(`📦 Loaded ${this.installed.size} installed extension(s)`)
     } catch (error) {

@@ -3,7 +3,10 @@ export const CHAT_FILE_TOPIC = 'universal-connectivity-file'
 export const PUBSUB_PEER_DISCOVERY = 'universal-connectivity-browser-peer-discovery'
 export const FILE_EXCHANGE_PROTOCOL = '/universal-connectivity-file/1'
 export const DIRECT_MESSAGE_PROTOCOL = '/universal-connectivity/dm/1.0.0'
-export const EXTENSION_DISCOVERY_TOPIC = 'universal-connectivity-extensions'
+
+// Extension system - uses identify protocol for discovery and direct streams for communication
+// Protocol format: /uc/extension/{extensionId}/{version}
+export const EXTENSION_PROTOCOL_PREFIX = '/uc/extension/'
 
 export const CIRCUIT_RELAY_CODE = 290
 

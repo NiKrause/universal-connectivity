@@ -5,7 +5,6 @@ import { ExtensionProtocol } from '@/lib/extension-protocol'
 import {
   ExtensionOffer,
   InstalledExtension,
-  CommandResponse,
 } from '@/lib/extension-types'
 
 interface ExtensionContextType {
@@ -17,7 +16,7 @@ interface ExtensionContextType {
   uninstallExtension: (extensionId: string) => boolean
   setExtensionEnabled: (extensionId: string, enabled: boolean) => boolean
   dismissOffer: (extensionId: string) => void
-  executeCommand: (extensionId: string, command: string, args: string[]) => Promise<CommandResponse>
+  executeCommand: (extensionId: string, command: string, args: string[]) => Promise<{ success: boolean; data?: any; error?: string }>
   isInstalled: (extensionId: string) => boolean
 }
 
@@ -50,13 +49,14 @@ export function ExtensionContextProvider({ children }: ExtensionContextProviderP
 
     const initializeExtensions = async () => {
       try {
-        // Create and start extension manager
+        // Create and start extension manager (uses identify protocol for discovery)
         const extensionManager = new ExtensionManager(libp2p)
         await extensionManager.start()
         setManager(extensionManager)
 
-        // Create and start extension protocol
-        const extensionProtocol = new ExtensionProtocol(libp2p)
+        // Create and start extension protocol (uses direct streams for commands)
+        // Pass manager so protocol can get peer list and mark successful peers
+        const extensionProtocol = new ExtensionProtocol(libp2p, extensionManager)
         await extensionProtocol.start()
         setProtocol(extensionProtocol)
 
@@ -111,7 +111,7 @@ export function ExtensionContextProvider({ children }: ExtensionContextProviderP
     extensionId: string,
     command: string,
     args: string[]
-  ): Promise<CommandResponse> => {
+  ): Promise<{ success: boolean; data?: any; error?: string }> => {
     if (!protocol) {
       throw new Error('Extension protocol not initialized')
     }

@@ -1,167 +1,155 @@
-import type { Message } from '@libp2p/interface'
 import type { Libp2pType } from '@/context/ctx'
+import { peerIdFromString } from '@libp2p/peer-id'
 import { v4 as uuidv4 } from 'uuid'
-import { CommandRequest, CommandResponse } from './extension-types'
+import { pbStream } from 'it-protobuf-stream'
+import { ExtensionManager } from './extension-manager'
+import { ext } from './protobuf/extension'
+import {
+  getExtensionProtocol,
+} from './extension-types'
 
 const COMMAND_TIMEOUT = 5000 // 5 seconds
 
 /**
- * Get the pubsub topic for an extension's command channel
- */
-function getExtensionCommandTopic(extensionId: string): string {
-  return `uc-ext-${extensionId}-commands`
-}
-
-/**
- * Extension command protocol - handles command execution via pubsub
+ * Extension command protocol - handles command execution via direct libp2p streams
+ * 
+ * Uses the same pattern as direct-message.ts for clean stream handling
+ * Tries each known peer in order (last successful first) until one responds
  */
 export class ExtensionProtocol {
   private libp2p: Libp2pType
-  private pendingRequests: Map<string, {
-    resolve: (response: CommandResponse) => void
-    reject: (error: Error) => void
-    timeout: NodeJS.Timeout
-  }> = new Map()
-  private subscribedTopics: Set<string> = new Set()
+  private extensionManager: ExtensionManager
 
-  constructor(libp2p: Libp2pType) {
+  constructor(libp2p: Libp2pType, extensionManager: ExtensionManager) {
     this.libp2p = libp2p
+    this.extensionManager = extensionManager
   }
 
   /**
-   * Start the protocol - set up message listener
+   * Start the protocol
    */
   async start(): Promise<void> {
-    this.libp2p.services.pubsub.addEventListener('message', this.handleMessage.bind(this))
-    console.log('✅ ExtensionProtocol: Started')
+    console.log('✅ ExtensionProtocol: Started (using direct streams)')
   }
 
   /**
-   * Stop the protocol - clean up
+   * Stop the protocol
    */
   async stop(): Promise<void> {
-    this.libp2p.services.pubsub.removeEventListener('message', this.handleMessage.bind(this))
-    
-    // Reject all pending requests
-    for (const [requestId, pending] of this.pendingRequests.entries()) {
-      clearTimeout(pending.timeout)
-      pending.reject(new Error('Protocol stopped'))
-    }
-    this.pendingRequests.clear()
-    
     console.log('✅ ExtensionProtocol: Stopped')
   }
 
   /**
    * Execute a command on an extension
+   * Tries each known peer until one responds successfully
    */
   async executeCommand(
     extensionId: string,
     command: string,
     args: string[]
-  ): Promise<CommandResponse> {
-    const topic = getExtensionCommandTopic(extensionId)
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    const extension = this.extensionManager.getExtension(extensionId)
     
-    // Subscribe to the extension's command topic if not already subscribed
-    if (!this.subscribedTopics.has(topic)) {
+    if (!extension) {
+      throw new Error(`Extension '${extensionId}' is not installed`)
+    }
+
+    const peerIds = this.extensionManager.getExtensionPeers(extensionId)
+    
+    if (peerIds.length === 0) {
+      throw new Error(`No peers available for extension '${extensionId}'`)
+    }
+
+    const protocol = getExtensionProtocol(extensionId, extension.manifest.version)
+    const errors: string[] = []
+
+    // Try each peer in order (last successful first)
+    for (const peerId of peerIds) {
       try {
-        await this.libp2p.services.pubsub.subscribe(topic)
-        this.subscribedTopics.add(topic)
-        console.log(`📡 Subscribed to extension topic: ${topic}`)
-      } catch (error) {
-        throw new Error(`Failed to subscribe to extension topic: ${error}`)
+        console.log(`🔗 Trying peer ${peerId.slice(-8)} for /${extensionId}-${command}`)
+        const response = await this.executeOnPeer(peerId, protocol, extensionId, command, args)
+        
+        // Mark this peer as successful
+        this.extensionManager.markPeerSuccess(extensionId, peerId)
+        console.log(`✅ Command response from peer ${peerId.slice(-8)}`)
+        
+        return response
+      } catch (error: any) {
+        console.warn(`❌ Peer ${peerId.slice(-8)} failed:`, error.message)
+        errors.push(`${peerId.slice(-8)}: ${error.message}`)
+        // Continue to next peer
       }
     }
 
-    const requestId = uuidv4()
-    const request: CommandRequest = {
-      type: 'command',
-      extensionId,
-      command,
-      args,
-      requestId,
-      timestamp: Date.now(),
-    }
-
-    // Create promise that will be resolved when we get a response
-    const responsePromise = new Promise<CommandResponse>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingRequests.delete(requestId)
-        reject(new Error(`Command timeout: no response from extension '${extensionId}'`))
-      }, COMMAND_TIMEOUT)
-
-      this.pendingRequests.set(requestId, { resolve, reject, timeout })
-    })
-
-    // Publish the command request
-    try {
-      const messageData = new TextEncoder().encode(JSON.stringify(request))
-      await this.libp2p.services.pubsub.publish(topic, messageData)
-      console.log(`📤 Sent command: /${extensionId}-${command} ${args.join(' ')}`)
-    } catch (error) {
-      this.pendingRequests.delete(requestId)
-      throw new Error(`Failed to publish command: ${error}`)
-    }
-
-    return responsePromise
+    // All peers failed
+    throw new Error(`All peers failed for extension '${extensionId}':\n${errors.join('\n')}`)
   }
 
   /**
-   * Handle incoming pubsub messages (looking for command responses)
+   * Execute a command on a specific peer
+   * Uses pbStream exactly like direct-message.ts
    */
-  private handleMessage(evt: CustomEvent<Message>): void {
-    const { topic, data } = evt.detail
-
-    // Check if this is an extension command topic we're interested in
-    if (!topic.startsWith('uc-ext-') || !topic.endsWith('-commands')) {
-      return
-    }
-
-    // Only process signed messages
-    if (evt.detail.type !== 'signed') {
-      return
-    }
+  private async executeOnPeer(
+    peerId: string,
+    protocol: string,
+    extensionId: string,
+    command: string,
+    args: string[]
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    const pId = peerIdFromString(peerId)
+    const stream = await this.libp2p.dialProtocol(pId, protocol)
+    const datastream = pbStream(stream)
 
     try {
-      const messageText = new TextDecoder().decode(data)
-      const message = JSON.parse(messageText)
-
-      if (message.type === 'response') {
-        this.handleCommandResponse(message as CommandResponse)
+      const requestId = uuidv4()
+      // Wrap the command request in the Request wrapper message
+      const request: ext.Request = {
+        payload: 'command',
+        command: {
+          requestId,
+          extensionId,
+          command,
+          args,
+          timestamp: BigInt(Date.now()),
+        }
       }
-    } catch (error) {
-      console.error('ExtensionProtocol: Failed to parse message:', error)
+
+      // Send request
+      console.log(`📤 Sending command: /${extensionId}-${command}`)
+      const signal = AbortSignal.timeout(COMMAND_TIMEOUT)
+      await datastream.write(request, ext.Request, { signal })
+
+      // Read response
+      console.log(`📥 Waiting for command response...`)
+      const response = await datastream.read(ext.Response, { signal })
+
+      console.log(`📥 Received command response:`, {
+        payload: response.payload,
+        hasCommand: !!response.command,
+        responseKeys: Object.keys(response)
+      })
+      
+      // Check if it's a command response
+      // Note: Some implementations don't send the payload field
+      if ((response.payload === 'command' || !response.payload) && response.command) {
+        if (response.command.requestId === requestId) {
+          if (response.command.success) {
+            return {
+              success: true,
+              data: response.command.data ? JSON.parse(response.command.data) : undefined,
+            }
+          }
+          throw new Error(response.command.error || 'Command failed')
+        }
+      }
+      
+      throw new Error('Invalid response')
+    } finally {
+      try {
+        await stream.close({ signal: AbortSignal.timeout(5000) })
+      } catch (err: any) {
+        stream.abort(err)
+      }
     }
-  }
-
-  /**
-   * Handle a command response
-   */
-  private handleCommandResponse(response: CommandResponse): void {
-    const pending = this.pendingRequests.get(response.requestId)
-    
-    if (!pending) {
-      // Response for a request we don't know about (maybe timed out already)
-      return
-    }
-
-    // Clear timeout and resolve/reject the promise
-    clearTimeout(pending.timeout)
-    this.pendingRequests.delete(response.requestId)
-
-    if (response.success) {
-      pending.resolve(response)
-      console.log(`✅ Command response received (success)`)
-    } else {
-      pending.reject(new Error(response.error || 'Command failed'))
-      console.error(`❌ Command response received (error): ${response.error}`)
-    }
-  }
-
-  /**
-   * Get command topic for an extension (utility for extensions to use)
-   */
-  static getCommandTopic(extensionId: string): string {
-    return getExtensionCommandTopic(extensionId)
   }
 }

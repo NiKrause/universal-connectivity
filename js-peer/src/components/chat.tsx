@@ -7,6 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { useExtensionContext } from '@/context/extension-ctx'
 import { isCommand, parseCommand, isValidCommand } from '@/lib/command-parser'
 import InstalledExtensions from './installed-extensions'
+import { ChatPeerList } from './chat-peer-list'
+import { peerIdFromString } from '@libp2p/peer-id'
 
 interface MessageProps extends ChatMessage { }
 
@@ -47,10 +49,13 @@ function Message({ msg, fileObjectUrl, from, peerId }: MessageProps) {
 
 export default function ChatContainer() {
   const { libp2p } = useLibp2pContext()
-  const { messageHistory, setMessageHistory, files, setFiles } = useChatContext();
+  const { messageHistory, setMessageHistory, files, setFiles, roomId, setRoomId, directMessages, setDirectMessages } = useChatContext();
   const { executeCommand, isInstalled } = useExtensionContext();
   const [input, setInput] = useState<string>('')
   const fileRef = useRef<HTMLInputElement>(null);
+  
+  const isPrivateChat = roomId !== ''
+  const privateMessages = isPrivateChat ? (directMessages[roomId] || []) : []
 
   // Handle extension icon click - send help command
   const handleExtensionClick = useCallback(async (extensionId: string) => {
@@ -197,24 +202,54 @@ export default function ChatContainer() {
       return
     }
 
-    // Regular chat message
-    console.log(
-      `peers in gossip for topic ${CHAT_TOPIC}:`,
-      libp2p.services.pubsub.getSubscribers(CHAT_TOPIC).toString(),
-    )
+    // Private or group chat message
+    if (isPrivateChat) {
+      // Send direct message
+      try {
+        const targetPeerId = peerIdFromString(roomId)
+        await libp2p.services.directMessage.send(targetPeerId, input)
+        
+        // Add to direct messages
+        const newMsg: ChatMessage = {
+          msgId: uuidv4(),
+          msg: input,
+          fileObjectUrl: undefined,
+          from: 'me',
+          peerId: myPeerId,
+          read: false,
+          receivedAt: Date.now(),
+        }
+        
+        setDirectMessages(prev => ({
+          ...prev,
+          [roomId]: [...(prev[roomId] || []), newMsg]
+        }))
+        
+        setInput('')
+      } catch (error: any) {
+        console.error('Failed to send direct message:', error)
+        alert(`Failed to send message: ${error.message}`)
+      }
+    } else {
+      // Group chat message
+      console.log(
+        `peers in gossip for topic ${CHAT_TOPIC}:`,
+        libp2p.services.pubsub.getSubscribers(CHAT_TOPIC).toString(),
+      )
 
-    const res = await libp2p.services.pubsub.publish(
-      CHAT_TOPIC,
-      new TextEncoder().encode(input),
-    )
-    console.log(
-      'sent message to: ',
-      res.recipients.map((peerId) => peerId.toString()),
-    )
+      const res = await libp2p.services.pubsub.publish(
+        CHAT_TOPIC,
+        new TextEncoder().encode(input),
+      )
+      console.log(
+        'sent message to: ',
+        res.recipients.map((peerId) => peerId.toString()),
+      )
 
-    setMessageHistory([...messageHistory, { msgId: uuidv4(), msg: input, fileObjectUrl: undefined, from: 'me', peerId: myPeerId, read: false, receivedAt: Date.now() }])
-    setInput('')
-  }, [input, messageHistory, setInput, libp2p, setMessageHistory, executeCommand, isInstalled])
+      setMessageHistory([...messageHistory, { msgId: uuidv4(), msg: input, fileObjectUrl: undefined, from: 'me', peerId: myPeerId, read: false, receivedAt: Date.now() }])
+      setInput('')
+    }
+  }, [input, messageHistory, setInput, libp2p, setMessageHistory, executeCommand, isInstalled, isPrivateChat, roomId, setDirectMessages])
 
   const sendFile = useCallback(async (readerEvent: ProgressEvent<FileReader>) => {
     const fileBody = readerEvent.target?.result as ArrayBuffer;
@@ -304,29 +339,34 @@ export default function ChatContainer() {
   return (
     <div className="container mx-auto">
       <div className="min-w-full border rounded lg:grid lg:grid-cols-3">
-        {/* <RoomList /> */}
-        <div className="lg:col-span-3 lg:block">
+        <div className="lg:col-span-2 lg:block">
           <div className="w-full">
-            <div className="relative flex items-center p-3 border-b border-gray-300">
-              {/* disable
-              <img
-                className="object-cover w-10 h-10 rounded-full"
-                src="https://github.com/achingbrain.png"
-                alt="username"
-              />
-              <span className="absolute w-3 h-3 bg-green-600 rounded-full left-10 top-3"></span> */}
-              <span className="text-3xl">💁🏽‍♀️💁🏿‍♂️</span>
+            <div className={`relative flex items-center p-3 border-b border-gray-300 ${isPrivateChat ? 'bg-green-50 border-green-200' : ''}`}>
+              {isPrivateChat && (
+                <button
+                  onClick={() => setRoomId('')}
+                  className="mr-2 text-gray-600 hover:text-gray-900 text-xl"
+                  title="Back to public chat"
+                >
+                  ←
+                </button>
+              )}
+              <span className="text-3xl">{isPrivateChat ? '🔐' : '💁🏽‍♀️💁🏿‍♂️'}</span>
               <span className="block ml-2 font-bold text-gray-600">
-                Public Chat
+                {isPrivateChat ? `Private: ${roomId.slice(0, 8)}...${roomId.slice(-4)}` : 'Public Chat'}
               </span>
-              <InstalledExtensions onExtensionClick={handleExtensionClick} />
+              {!isPrivateChat && <InstalledExtensions onExtensionClick={handleExtensionClick} />}
             </div>
             <div className="relative w-full flex flex-col-reverse p-6 overflow-y-auto h-[40rem] bg-gray-100">
               <ul className="space-y-2">
                 {/* messages start */}
-                {messageHistory.map((message, idx) => (
-                  <Message key={idx} {...message} />
-                ))}
+                {isPrivateChat
+                  ? privateMessages.map((message, idx) => (
+                      <Message key={idx} {...message} />
+                    ))
+                  : messageHistory.map((message, idx) => (
+                      <Message key={idx} {...message} />
+                    ))}
                 {/* messages end */}
               </ul>
             </div>
@@ -406,6 +446,7 @@ export default function ChatContainer() {
             </div>
           </div>
         </div>
+        <ChatPeerList />
       </div>
     </div>
   )
