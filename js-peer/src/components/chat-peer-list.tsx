@@ -63,8 +63,10 @@ export function ChatPeerList({ hideHeader = false }: ChatPeerListProps) {
           try {
             const peerId = peerIdFromString(peerIdStr)
             return (
-              <div key={peerIdStr} className="px-3 py-2 border-b border-gray-300 focus:outline-none">
-                <PeerWrapper peer={peerId} self={false} withName={true} withUnread={true} />
+              <div key={peerIdStr} className="border-b border-gray-300">
+                <div className="px-3 py-2">
+                  <PeerWrapper peer={peerId} self={false} withName={true} withUnread={true} />
+                </div>
               </div>
             )
           } catch (e) {

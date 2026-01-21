@@ -93,6 +93,13 @@ export async function startLibp2p(): Promise<Libp2pType> {
     log(`changed multiaddrs: peer ${peer.id.toString()} multiaddrs: ${multiaddrs}`)
   })
 
+  // Log when peers are identified
+  libp2p.addEventListener('peer:identify', (event) => {
+    const { peerId, protocols } = event.detail
+    log(`peer identified: ${peerId.toString().slice(-8)} with ${protocols.length} protocols`)
+    console.log(`🔍 Peer identified: ${peerId.toString().slice(-8)} with protocols:`, protocols)
+  })
+
   // 👇 explicitly dial peers discovered via pubsub
   libp2p.addEventListener('peer:discovery', (event) => {
     const { multiaddrs, id } = event.detail

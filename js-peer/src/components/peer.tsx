@@ -63,30 +63,40 @@ export function PeerWrapper({ peer, self, withName, withUnread }: PeerProps) {
     }
   }, [libp2p, peer])
 
-  const isDMSupported = identified && libp2p.services.directMessage.isDMPeer(peer)
+  // DM support can be learned without identify (via successful DM handshake)
+  const isDMSupported = libp2p.services.directMessage.isDMPeer(peer)
 
-  if (self || !identified) {
+  // Debug logging
+  if (!self && identified) {
+    console.log(`Peer ${peer.toString().slice(-8)}: identified=${identified}, connected=${isConnected}, isDMSupported=${isDMSupported}`)
+  }
+
+  if (self) {
     return <Peer peer={peer} self={self} withName={withName} withUnread={withUnread} isConnected={isConnected} isDMSupported={false} />
   }
 
-  if (identified && isDMSupported) {
+  // If we've proven DM support (inbound or outbound), allow DM regardless of identify
+  if (isDMSupported) {
     return (
-      <div className="relative inline-block text-left cursor-pointer hover:bg-gray-50 rounded px-1 -mx-1" onClick={() => handleSetRoomId()}>
+      <div className="relative w-full cursor-pointer hover:bg-gray-50 rounded px-1 -mx-1 transition-colors" onClick={handleSetRoomId}>
         <Peer peer={peer} self={self} withName={withName} withUnread={withUnread} isConnected={isConnected} isDMSupported={true} />
       </div>
     )
   }
 
-  if (identified && !isDMSupported) {
-    return (
-      <div className="relative inline-block text-left group">
-        <Peer peer={peer} self={self} withName={withName} withUnread={withUnread} isConnected={isConnected} isDMSupported={false} />
-        <div className="absolute top-10 left-5 scale-0 rounded bg-white border text-gray-600 p-2 text-xs group-hover:scale-100 z-10">
-          Direct{'\u00A0'}message unsupported
-        </div>
-      </div>
-    )
+  // Otherwise fall back to identify-gated display
+  if (!identified) {
+    return <Peer peer={peer} self={self} withName={withName} withUnread={withUnread} isConnected={isConnected} isDMSupported={false} />
   }
+
+  return (
+    <div className="relative inline-block text-left group">
+      <Peer peer={peer} self={self} withName={withName} withUnread={withUnread} isConnected={isConnected} isDMSupported={false} />
+      <div className="absolute top-10 left-5 scale-0 rounded bg-white border text-gray-600 p-2 text-xs group-hover:scale-100 z-10">
+        Direct{'\u00A0'}message unsupported
+      </div>
+    </div>
+  )
 }
 
 interface PeerDisplayProps extends PeerProps {

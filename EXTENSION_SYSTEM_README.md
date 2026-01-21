@@ -300,6 +300,10 @@ To reset: Open browser DevTools → Application → Local Storage → Clear
 /sheet-list  # Shows: ["hackathon"]
 ```
 
+### References
+
+Another UCEP implementing app is [LLMesh a browser-based P2P chat mesh](https://github.com/Nkovaturient/LLMesh) where LLM joins as a peer via UCEP extensions, creating a living network where AI and humans chat together in a fully decentralized manner.
+
 ## Development
 
 To add new commands to the spreadsheet extension:
