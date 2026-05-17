@@ -1,0 +1,670 @@
+name: uc-go-peer rootfs reusable
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  SHARED_ALEPH_NODE_VERSION: 0.1.19
+
+on:
+  workflow_call:
+    inputs:
+      publish:
+        description: Publish the built qcow2 to Aleph
+        required: false
+        default: false
+        type: boolean
+      rootfs_version:
+        description: Optional explicit version override for the generated rootfs manifest
+        required: false
+        default: ''
+        type: string
+      aleph_domain:
+        description: Optional production domain for js-peer manifest publishing
+        required: false
+        default: ''
+        type: string
+      aleph_retention_days:
+        description: Optional retention_days value for Aleph hosting
+        required: false
+        default: ''
+        type: string
+      deploy_vm:
+        description: Deploy a uc-go-peer VM from the published rootfs and verify reachability
+        required: false
+        default: false
+        type: boolean
+      vm_name:
+        description: Aleph VM instance name to create when deploy_vm is enabled
+        required: false
+        default: uc-go-peer
+        type: string
+      vm_ssh_public_key:
+        description: Optional SSH public key override for the deployed VM
+        required: false
+        default: ''
+        type: string
+      vm_crn_hash:
+        description: Optional target CRN hash for the uc-go-peer credit deployment
+        required: false
+        default: ''
+        type: string
+      vm_vcpus:
+        description: Requested vCPU count for the uc-go-peer VM
+        required: false
+        default: '1'
+        type: string
+      vm_memory_mib:
+        description: Requested memory in MiB for the uc-go-peer VM
+        required: false
+        default: '1024'
+        type: string
+      vm_rootfs_size_mib:
+        description: Rootfs disk size in MiB for the deployed uc-go-peer VM
+        required: false
+        default: '20480'
+        type: string
+      vm_preferred_country_code:
+        description: Preferred two-letter country code for automatic CRN selection
+        required: false
+        default: DE
+        type: string
+      vm_geo_crn_limit:
+        description: Maximum number of top-ranked CRNs to geolocate when preferring a country
+        required: false
+        default: '30'
+        type: string
+      vm_max_crn_attempts:
+        description: Maximum number of distinct CRNs to try when Aleph rejects a deployment
+        required: false
+        default: '5'
+        type: string
+      vm_enable_caddy_proxy:
+        description: Enable the proxy/Caddy path so uc-go-peer also advertises secure WSS via the Aleph web proxy hostname
+        required: false
+        default: true
+        type: boolean
+      retain_successful_deployments:
+        description: Keep only the latest N successful published+deployed uc-go-peer deployments and forget older Aleph INSTANCE/STORE messages
+        required: false
+        default: '2'
+        type: string
+    secrets:
+      ALEPH_PRIVATE_KEY:
+        required: false
+      VM_SSH_PUBLIC_KEY:
+        required: false
+    outputs:
+      rootfs_version:
+        description: Derived or supplied rootfs version
+        value: ${{ jobs.build-rootfs.outputs.rootfs_version }}
+      rootfs_cid:
+        description: Published IPFS CID for the rootfs image
+        value: ${{ jobs.build-rootfs.outputs.rootfs_cid }}
+      rootfs_item_hash:
+        description: Aleph STORE message item hash for the published rootfs image
+        value: ${{ jobs.build-rootfs.outputs.rootfs_item_hash }}
+      manifest_latest_url:
+        description: Stable latest manifest URL when published through js-peer
+        value: ${{ jobs.build-rootfs.outputs.manifest_latest_url }}
+      manifest_versioned_url:
+        description: Versioned manifest URL when published through js-peer
+        value: ${{ jobs.build-rootfs.outputs.manifest_versioned_url }}
+      site_url:
+        description: Published js-peer site URL when available
+        value: ${{ jobs.build-rootfs.outputs.site_url }}
+      vm_instance_item_hash:
+        description: Aleph INSTANCE item hash for the optionally deployed VM
+        value: ${{ jobs.build-rootfs.outputs.vm_instance_item_hash }}
+      vm_status:
+        description: Final Aleph status for the optionally deployed VM
+        value: ${{ jobs.build-rootfs.outputs.vm_status }}
+      vm_host_ipv4:
+        description: Public IPv4 reported for the optionally deployed VM
+        value: ${{ jobs.build-rootfs.outputs.vm_host_ipv4 }}
+      vm_ipv6:
+        description: IPv6 reported for the optionally deployed VM
+        value: ${{ jobs.build-rootfs.outputs.vm_ipv6 }}
+      vm_web_proxy_url:
+        description: Web proxy URL for the optionally deployed VM
+        value: ${{ jobs.build-rootfs.outputs.vm_web_proxy_url }}
+      vm_ssh_command:
+        description: Ready-to-use ssh command for the optionally deployed VM
+        value: ${{ jobs.build-rootfs.outputs.vm_ssh_command }}
+      vm_mapped_ports_json:
+        description: JSON object of published port mappings for the optionally deployed VM
+        value: ${{ jobs.build-rootfs.outputs.vm_mapped_ports_json }}
+      vm_verification_ok:
+        description: Whether all required VM reachability checks passed
+        value: ${{ jobs.build-rootfs.outputs.vm_verification_ok }}
+      vm_verification_json:
+        description: JSON object with the VM reachability checks
+        value: ${{ jobs.build-rootfs.outputs.vm_verification_json }}
+      vm_relay_peer_id:
+        description: Relay peer ID extracted from the deployed guest
+        value: ${{ jobs.build-rootfs.outputs.vm_relay_peer_id }}
+      vm_probe_multiaddrs_json:
+        description: JSON array of relay multiaddrs probed after deployment
+        value: ${{ jobs.build-rootfs.outputs.vm_probe_multiaddrs_json }}
+      vm_browser_bootstrap_multiaddrs_json:
+        description: JSON array of browser-dialable secure websocket relay multiaddrs for js-peer bootstrap configuration
+        value: ${{ jobs.build-rootfs.outputs.vm_browser_bootstrap_multiaddrs_json }}
+      vm_protocol_probe_ok:
+        description: Whether the libp2p protocol probes passed for the deployed relay multiaddrs
+        value: ${{ jobs.build-rootfs.outputs.vm_protocol_probe_ok }}
+      vm_protocol_probe_json:
+        description: JSON lines emitted by the relay protocol probe step
+        value: ${{ jobs.build-rootfs.outputs.vm_protocol_probe_json }}
+      retention_result_json:
+        description: JSON summary of the successful deployment retention cleanup
+        value: ${{ jobs.build-rootfs.outputs.retention_result_json }}
+
+permissions:
+  contents: read
+
+jobs:
+  build-rootfs:
+    runs-on: ubuntu-24.04
+    env:
+      ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
+    outputs:
+      rootfs_version: ${{ steps.export_outputs.outputs.rootfs_version }}
+      rootfs_cid: ${{ steps.export_outputs.outputs.rootfs_cid }}
+      rootfs_item_hash: ${{ steps.export_outputs.outputs.rootfs_item_hash }}
+      manifest_latest_url: ${{ steps.export_outputs.outputs.manifest_latest_url }}
+      manifest_versioned_url: ${{ steps.export_outputs.outputs.manifest_versioned_url }}
+      site_url: ${{ steps.export_outputs.outputs.site_url }}
+      vm_instance_item_hash: ${{ steps.export_outputs.outputs.vm_instance_item_hash }}
+      vm_status: ${{ steps.export_outputs.outputs.vm_status }}
+      vm_host_ipv4: ${{ steps.export_outputs.outputs.vm_host_ipv4 }}
+      vm_ipv6: ${{ steps.export_outputs.outputs.vm_ipv6 }}
+      vm_web_proxy_url: ${{ steps.export_outputs.outputs.vm_web_proxy_url }}
+      vm_ssh_command: ${{ steps.export_outputs.outputs.vm_ssh_command }}
+      vm_mapped_ports_json: ${{ steps.export_outputs.outputs.vm_mapped_ports_json }}
+      vm_verification_ok: ${{ steps.export_outputs.outputs.vm_verification_ok }}
+      vm_verification_json: ${{ steps.export_outputs.outputs.vm_verification_json }}
+      vm_relay_peer_id: ${{ steps.export_outputs.outputs.vm_relay_peer_id }}
+      vm_probe_multiaddrs_json: ${{ steps.export_outputs.outputs.vm_probe_multiaddrs_json }}
+      vm_browser_bootstrap_multiaddrs_json: ${{ steps.export_outputs.outputs.vm_browser_bootstrap_multiaddrs_json }}
+      vm_protocol_probe_ok: ${{ steps.export_outputs.outputs.vm_protocol_probe_ok }}
+      vm_protocol_probe_json: ${{ steps.export_outputs.outputs.vm_protocol_probe_json }}
+      retention_result_json: ${{ steps.export_outputs.outputs.retention_result_json }}
+
+    steps:
+      - name: Checkout universal-connectivity
+        uses: actions/checkout@v5
+        with:
+          path: universal-connectivity
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24.x'
+
+      - name: Load uc-go-peer rootfs profile
+        working-directory: universal-connectivity
+        run: |
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          from pathlib import Path
+
+          profile = json.loads(Path("go-peer/aleph/root-profiles/uc-go-peer.json").read_text())
+          rootfs = profile["rootfs"]
+          services = profile["services"]
+          manifest = profile["manifest"]
+
+          print("ROOTFS_CONTRACT_FILE=${{ github.workspace }}/universal-connectivity/go-peer/aleph/root-profiles/uc-go-peer.json")
+          print(f"ROOTFS_PROFILE={rootfs['profile']}")
+          print(f"ROOTFS_INSTALL_MODE={rootfs['installMode']}")
+          print(f"ROOTFS_INSTALL_DIR={rootfs['installDir']}")
+          print(f"ROOTFS_BINARY_PATH={rootfs.get('binaryPath', '/usr/local/bin/universal-chat-go')}")
+          print(f"ROOTFS_DATA_DIR={rootfs['dataDir']}")
+          print(f"ROOTFS_ENV_FILE={rootfs['envFile']}")
+          print(f"ROOTFS_SERVICE_MAIN={services['main']}")
+          print(f"ROOTFS_SERVICE_BOOTSTRAP={services['bootstrap']}")
+          print(f"ROOTFS_SERVICE_AUTOTLS={services['autotlsRefresh']}")
+          print(f"ROOTFS_MANIFEST_COPY_TARGET={manifest['copyTarget']}")
+          PY
+
+      - name: Derive rootfs version
+        working-directory: universal-connectivity
+        run: |
+          if [[ -n "${{ inputs.rootfs_version }}" ]]; then
+            echo "ROOTFS_VERSION=${{ inputs.rootfs_version }}" >> "$GITHUB_ENV"
+          else
+            short_sha="$(git rev-parse --short HEAD)"
+            build_date="$(date -u +%Y%m%d)"
+            echo "ROOTFS_VERSION=uc-go-peer-git-${build_date}-${short_sha}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Validate publish configuration
+        run: |
+          if [[ "${{ inputs.publish }}" == "true" && -z "${ALEPH_PRIVATE_KEY}" ]]; then
+            echo "publish=true requires the ALEPH_PRIVATE_KEY secret." >&2
+            exit 1
+          fi
+          if [[ "${{ inputs.deploy_vm }}" == "true" && "${{ inputs.publish }}" != "true" ]]; then
+            echo "deploy_vm=true requires publish=true so the rootfs gets an Aleph item hash." >&2
+            exit 1
+          fi
+          if [[ "${{ inputs.deploy_vm }}" == "true" && -z "${{ inputs.vm_ssh_public_key }}" && -z "${{ secrets.VM_SSH_PUBLIC_KEY }}" ]]; then
+            echo "deploy_vm=true requires vm_ssh_public_key or the VM_SSH_PUBLIC_KEY secret." >&2
+            exit 1
+          fi
+
+      - name: Install rootfs build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            curl \
+            libguestfs-tools \
+            libsecp256k1-dev \
+            python3 \
+            python3-pip \
+            qemu-utils \
+            squashfs-tools \
+            tar
+
+      - name: Install aleph client
+        if: ${{ inputs.publish }}
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install aleph-client
+          python3 -m pip install pycares==4.11.0
+
+      - name: Prepare Aleph account
+        if: ${{ inputs.publish }}
+        run: |
+          mkdir -p "$HOME/.aleph-im/private-keys"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          private_key = os.environ["ALEPH_PRIVATE_KEY"].strip()
+          if private_key.startswith("0x"):
+              private_key = private_key[2:]
+
+          key_bytes = bytes.fromhex(private_key)
+          config_home = Path.home() / ".aleph-im"
+          key_path = config_home / "private-keys" / "aleph-vm.key"
+          config_path = config_home / "config.json"
+
+          key_path.write_bytes(key_bytes)
+          config_path.write_text(json.dumps({"chain": "ETH", "path": str(key_path)}))
+          print(f"Wrote Aleph key to {key_path}")
+          print(f"Wrote Aleph config to {config_path}")
+          PY
+
+      - name: Build uc-go-peer rootfs through shared runner
+        id: build_rootfs
+        env:
+          ALEPH_VM_MODE: rootfs-publish
+          ALEPH_ROOTFS_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
+          ALEPH_ROOTFS_CONTRACT_PATH: ${{ env.ROOTFS_CONTRACT_FILE }}
+          ALEPH_ROOTFS_VERSION: ${{ env.ROOTFS_VERSION }}
+          ALEPH_ROOTFS_SKIP_UPLOAD: ${{ inputs.publish && 'false' || 'true' }}
+          ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_DELAY_SECONDS: '5'
+          ALEPH_ROOTFS_HAS_VIRT_CUSTOMIZE: 'true'
+          ALEPH_ROOTFS_HAS_DOCKER: 'false'
+        run: |
+          workdir="$(mktemp -d)"
+          cd "$workdir"
+          npm init -y >/dev/null 2>&1
+          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          node --input-type=module -e "import { runRootfsMode } from '@le-space/node'; await runRootfsMode(process.env);"
+
+      - name: Install js-peer publish helpers
+        if: ${{ inputs.publish }}
+        working-directory: universal-connectivity
+        run: |
+          python3 -m pip install requests 'py-cid @ git+https://github.com/ipld/py-cid.git@b13b51774ac3309c3c28a8da6eeab6d1e75dcddc'
+
+      - name: Build js-peer site with latest rootfs manifest
+        if: ${{ inputs.publish }}
+        working-directory: universal-connectivity/js-peer
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish js-peer site through shared runner
+        if: ${{ inputs.publish }}
+        id: deploy_site
+        env:
+          ALEPH_VM_MODE: site-publish
+          ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
+          ALEPH_SITE_DIRECTORY: js-peer/out
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
+        run: |
+          workdir="$(mktemp -d)"
+          cd "$workdir"
+          npm init -y >/dev/null 2>&1
+          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          export ALEPH_SITE_PUBLISH_SCRIPT="$workdir/node_modules/@le-space/node/reference/publish-static-site.py"
+          node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
+
+      - name: Link production domain through shared runner
+        if: ${{ inputs.publish && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
+        env:
+          ALEPH_VM_MODE: site-domain-link
+          ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
+          ALEPH_SITE_DOMAIN: ${{ inputs.aleph_domain }}
+          ALEPH_SITE_ITEM_HASH: ${{ steps.deploy_site.outputs.item_hash }}
+        run: |
+          if [[ -z "${{ steps.deploy_site.outputs.item_hash }}" ]]; then
+            echo "deploy_site.outputs.item_hash is missing after js-peer deployment"
+            exit 1
+          fi
+          workdir="$(mktemp -d)"
+          cd "$workdir"
+          npm init -y >/dev/null 2>&1
+          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
+
+      - name: Collect rootfs publish outputs
+        id: collect_rootfs_outputs
+        working-directory: universal-connectivity/go-peer/aleph
+        run: |
+          rootfs_cid='${{ steps.build_rootfs.outputs.rootfs_cid }}'
+          rootfs_item_hash='${{ steps.build_rootfs.outputs.rootfs_item_hash }}'
+          site_url='${{ steps.deploy_site.outputs.url }}'
+          manifest_latest_url=''
+          manifest_versioned_url=''
+
+          if [[ "${{ inputs.publish }}" == "true" ]]; then
+            if [[ -n "${{ inputs.aleph_domain }}" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+              manifest_latest_url="https://${{ inputs.aleph_domain }}/rootfs/uc-go-peer/latest.json"
+              manifest_versioned_url="https://${{ inputs.aleph_domain }}/rootfs/uc-go-peer/${ROOTFS_VERSION}.json"
+            elif [[ -n "${site_url}" ]]; then
+              manifest_latest_url="${site_url%/}/rootfs/uc-go-peer/latest.json"
+              manifest_versioned_url="${site_url%/}/rootfs/uc-go-peer/${ROOTFS_VERSION}.json"
+            fi
+          fi
+
+          {
+            echo "rootfs_version=${{ steps.build_rootfs.outputs.rootfs_version }}"
+            echo "rootfs_cid=${rootfs_cid}"
+            echo "rootfs_item_hash=${rootfs_item_hash}"
+            echo "manifest_latest_url=${manifest_latest_url}"
+            echo "manifest_versioned_url=${manifest_versioned_url}"
+            echo "site_url=${site_url}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Deploy uc-go-peer VM from published rootfs
+        if: ${{ inputs.deploy_vm }}
+        id: deploy_vm
+        uses: ./universal-connectivity/.github/actions/aleph-vm-deploy
+        with:
+          aleph_private_key: ${{ secrets.ALEPH_PRIVATE_KEY }}
+          name: ${{ inputs.vm_name }}
+          ssh_public_key: ${{ inputs.vm_ssh_public_key != '' && inputs.vm_ssh_public_key || secrets.VM_SSH_PUBLIC_KEY }}
+          rootfs_item_hash: ${{ steps.collect_rootfs_outputs.outputs.rootfs_item_hash }}
+          rootfs_version: ${{ env.ROOTFS_VERSION }}
+          rootfs_size_mib: ${{ inputs.vm_rootfs_size_mib }}
+          crn_hash: ${{ inputs.vm_crn_hash }}
+          vcpus: ${{ inputs.vm_vcpus }}
+          memory_mib: ${{ inputs.vm_memory_mib }}
+          preferred_country_code: ${{ inputs.vm_preferred_country_code }}
+          geo_crn_limit: ${{ inputs.vm_geo_crn_limit }}
+          max_crn_attempts: ${{ inputs.vm_max_crn_attempts }}
+          enable_caddy_proxy: ${{ inputs.vm_enable_caddy_proxy && 'true' || 'false' }}
+          auto_configure: 'true'
+          verify_reachability: 'true'
+
+      - name: Install relay probe dependencies
+        if: ${{ inputs.deploy_vm }}
+        working-directory: universal-connectivity/node-js-peer
+        run: npm ci --no-fund --no-audit
+
+      - name: Probe published and browser bootstrap relay multiaddrs
+        if: ${{ inputs.deploy_vm }}
+        id: protocol_probe
+        env:
+          ALEPH_VM_MODE: relay-probe
+          ALEPH_SITE_PROBE_WORKDIR: ${{ github.workspace }}/universal-connectivity/node-js-peer
+          ALEPH_SITE_PROBE_SCRIPT: ${{ github.workspace }}/universal-connectivity/node-js-peer/scripts/probe-relay.mjs
+          PROBE_MULTIADDRS_JSON: ${{ steps.deploy_vm.outputs.probe_multiaddrs_json }}
+          BROWSER_BOOTSTRAP_MULTIADDRS_JSON: ${{ steps.deploy_vm.outputs.browser_bootstrap_multiaddrs_json }}
+        run: |
+          workdir="$(mktemp -d)"
+          cd "$workdir"
+          npm init -y >/dev/null 2>&1
+          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
+
+      - name: Prepare js-peer relay bootstrap env
+        if: ${{ inputs.publish && inputs.deploy_vm }}
+        id: js_peer_bootstrap
+        env:
+          ALEPH_VM_MODE: bootstrap-env
+          BROWSER_BOOTSTRAP_MULTIADDRS_JSON: ${{ steps.deploy_vm.outputs.browser_bootstrap_multiaddrs_json }}
+        run: |
+          workdir="$(mktemp -d)"
+          cd "$workdir"
+          npm init -y >/dev/null 2>&1
+          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
+
+      - name: Rebuild js-peer site with deployed relay bootstrap addrs
+        if: ${{ inputs.publish && inputs.deploy_vm && steps.js_peer_bootstrap.outputs.available == 'true' }}
+        working-directory: universal-connectivity/js-peer
+        env:
+          NEXT_PUBLIC_RELAY_LISTEN_ADDRS: ${{ steps.js_peer_bootstrap.outputs.csv }}
+        run: |
+          npm run build
+
+      - name: Publish republished js-peer site through shared runner
+        if: ${{ inputs.publish && inputs.deploy_vm && steps.js_peer_bootstrap.outputs.available == 'true' }}
+        id: redeploy_site
+        env:
+          ALEPH_VM_MODE: site-publish
+          ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
+          ALEPH_SITE_DIRECTORY: js-peer/out
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
+        run: |
+          workdir="$(mktemp -d)"
+          cd "$workdir"
+          npm init -y >/dev/null 2>&1
+          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          export ALEPH_SITE_PUBLISH_SCRIPT="$workdir/node_modules/@le-space/node/reference/publish-static-site.py"
+          node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
+
+      - name: Relink production domain through shared runner
+        if: ${{ inputs.publish && inputs.deploy_vm && steps.js_peer_bootstrap.outputs.available == 'true' && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
+        env:
+          ALEPH_VM_MODE: site-domain-link
+          ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
+          ALEPH_SITE_DOMAIN: ${{ inputs.aleph_domain }}
+          ALEPH_SITE_ITEM_HASH: ${{ steps.redeploy_site.outputs.item_hash }}
+        run: |
+          if [[ -z "${{ steps.redeploy_site.outputs.item_hash }}" ]]; then
+            echo "redeploy_site.outputs.item_hash is missing after js-peer republish"
+            exit 1
+          fi
+          workdir="$(mktemp -d)"
+          cd "$workdir"
+          npm init -y >/dev/null 2>&1
+          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
+
+      - name: Retain latest successful deployments
+        if: ${{ inputs.publish && inputs.deploy_vm && fromJSON(inputs.retain_successful_deployments) > 0 }}
+        id: retention
+        env:
+          ALEPH_VM_MODE: retain-successful-deployments
+          ALEPH_VM_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
+          ALEPH_VM_API_HOST: https://api2.aleph.im
+          ALEPH_VM_CHANNEL: TEST
+          ALEPH_VM_RETENTION_KEEP_COUNT: ${{ inputs.retain_successful_deployments }}
+          ALEPH_VM_RETENTION_EXTRA_FORGET_HASHES_JSON: ${{ steps.redeploy_site.outputs.item_hash != '' && format('["{0}"]', steps.deploy_site.outputs.item_hash) || '[]' }}
+          ALEPH_VM_RETENTION_CURRENT_RECORD_JSON: >-
+            {"instance_item_hash":"${{ steps.deploy_vm.outputs.instance_item_hash }}","rootfs_item_hash":"${{ steps.collect_rootfs_outputs.outputs.rootfs_item_hash }}","rootfs_cid":"${{ steps.collect_rootfs_outputs.outputs.rootfs_cid }}","site_item_hash":"${{ steps.redeploy_site.outputs.item_hash != '' && steps.redeploy_site.outputs.item_hash || steps.deploy_site.outputs.item_hash }}","site_url":"${{ steps.redeploy_site.outputs.url != '' && steps.redeploy_site.outputs.url || steps.deploy_site.outputs.url }}","relay_peer_id":"${{ steps.deploy_vm.outputs.relay_peer_id }}","rootfs_version":"${{ env.ROOTFS_VERSION }}","vm_name":"${{ inputs.vm_name }}","deployed_at":"${{ github.run_id }}-${{ github.run_attempt }}"}
+        run: |
+          set -euo pipefail
+          workdir="$(mktemp -d)"
+          cd "${workdir}"
+          npm init -y >/dev/null 2>&1
+          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          node --input-type=module -e "import { runActionMode } from '@le-space/node'; await runActionMode(process.env);"
+
+      - name: Export reusable workflow outputs
+        if: ${{ always() }}
+        id: export_outputs
+        run: |
+          final_site_url='${{ steps.redeploy_site.outputs.url != '' && steps.redeploy_site.outputs.url || steps.deploy_site.outputs.url }}'
+          final_manifest_latest_url="${initial_manifest_latest_url}"
+          final_manifest_versioned_url="${initial_manifest_versioned_url}"
+
+          if [[ -n "${final_site_url}" ]]; then
+            if [[ -n "${{ inputs.aleph_domain }}" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+              final_manifest_latest_url="https://${{ inputs.aleph_domain }}/rootfs/uc-go-peer/latest.json"
+              final_manifest_versioned_url="https://${{ inputs.aleph_domain }}/rootfs/uc-go-peer/${ROOTFS_VERSION}.json"
+            else
+              final_manifest_latest_url="${final_site_url%/}/rootfs/uc-go-peer/latest.json"
+              final_manifest_versioned_url="${final_site_url%/}/rootfs/uc-go-peer/${ROOTFS_VERSION}.json"
+            fi
+          fi
+
+          {
+            echo "rootfs_version=${{ steps.collect_rootfs_outputs.outputs.rootfs_version }}"
+            echo "rootfs_cid=${{ steps.collect_rootfs_outputs.outputs.rootfs_cid }}"
+            echo "rootfs_item_hash=${{ steps.collect_rootfs_outputs.outputs.rootfs_item_hash }}"
+            echo "manifest_latest_url=${final_manifest_latest_url}"
+            echo "manifest_versioned_url=${final_manifest_versioned_url}"
+            echo "site_url=${final_site_url}"
+            echo "vm_instance_item_hash=${vm_instance_item_hash}"
+            echo "vm_status=${vm_status}"
+            echo "vm_host_ipv4=${vm_host_ipv4}"
+            echo "vm_ipv6=${vm_ipv6}"
+            echo "vm_web_proxy_url=${vm_web_proxy_url}"
+            echo "vm_ssh_command=${vm_ssh_command}"
+            echo "vm_mapped_ports_json=${vm_mapped_ports_json}"
+            echo "vm_verification_ok=${vm_verification_ok}"
+            echo "vm_verification_json=${vm_verification_json}"
+            echo "vm_relay_peer_id=${vm_relay_peer_id}"
+            echo "vm_probe_multiaddrs_json=${vm_probe_multiaddrs_json}"
+            echo "vm_browser_bootstrap_multiaddrs_json=${vm_browser_bootstrap_multiaddrs_json}"
+            echo "vm_protocol_probe_ok=${vm_protocol_probe_ok}"
+            echo "retention_result_json=${retention_result_json}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "vm_protocol_probe_json<<EOF"
+            printf '%s\n' "${vm_protocol_probe_json}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          initial_site_url: ${{ steps.collect_rootfs_outputs.outputs.site_url }}
+          initial_manifest_latest_url: ${{ steps.collect_rootfs_outputs.outputs.manifest_latest_url }}
+          initial_manifest_versioned_url: ${{ steps.collect_rootfs_outputs.outputs.manifest_versioned_url }}
+          vm_instance_item_hash: ${{ steps.deploy_vm.outputs.instance_item_hash }}
+          vm_status: ${{ steps.deploy_vm.outputs.instance_status }}
+          vm_host_ipv4: ${{ steps.deploy_vm.outputs.host_ipv4 }}
+          vm_ipv6: ${{ steps.deploy_vm.outputs.ipv6 }}
+          vm_web_proxy_url: ${{ steps.deploy_vm.outputs.web_proxy_url }}
+          vm_ssh_command: ${{ steps.deploy_vm.outputs.ssh_command }}
+          vm_mapped_ports_json: ${{ steps.deploy_vm.outputs.mapped_ports_json }}
+          vm_verification_ok: ${{ steps.deploy_vm.outputs.verification_ok }}
+          vm_verification_json: ${{ steps.deploy_vm.outputs.verification_json }}
+          vm_relay_peer_id: ${{ steps.deploy_vm.outputs.relay_peer_id }}
+          vm_probe_multiaddrs_json: ${{ steps.deploy_vm.outputs.probe_multiaddrs_json }}
+          vm_browser_bootstrap_multiaddrs_json: ${{ steps.deploy_vm.outputs.browser_bootstrap_multiaddrs_json }}
+          vm_protocol_probe_ok: ${{ steps.protocol_probe.outputs.ok }}
+          vm_protocol_probe_json: ${{ steps.protocol_probe.outputs.json }}
+          retention_result_json: ${{ steps.retention.outputs.retention_result_json }}
+
+      - name: Summarize rootfs build
+        if: ${{ always() }}
+        working-directory: universal-connectivity/go-peer/aleph
+        env:
+          VM_VERIFICATION_JSON: ${{ steps.export_outputs.outputs.vm_verification_json }}
+        run: |
+          {
+            echo "## uc-go-peer rootfs build"
+            echo
+            echo "- Builder path: \`@le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }} -> runRootfsMode(...), runSiteMode(...)\`"
+            echo "- Shared tooling source: \`npm:@le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}\`"
+            echo "- Rootfs profile: \`${ROOTFS_PROFILE}\`"
+            echo "- Install mode: \`${ROOTFS_INSTALL_MODE}\`"
+            echo "- Guest executable: \`${ROOTFS_BINARY_PATH}\`"
+            echo "- Derived version: \`${ROOTFS_VERSION}\`"
+            echo "- Publish to Aleph: \`${{ inputs.publish }}\`"
+            echo "- Deploy VM after publish: \`${{ inputs.deploy_vm }}\`"
+            echo "- Enable proxy-backed Caddy/WSS: \`${{ inputs.vm_enable_caddy_proxy }}\`"
+            echo "- Keep successful deployments: \`${{ inputs.retain_successful_deployments }}\`"
+            echo "- Main service: \`${ROOTFS_SERVICE_MAIN}\`"
+            echo "- Bootstrap service: \`${ROOTFS_SERVICE_BOOTSTRAP}\`"
+            echo "- Manifest copy target: \`${ROOTFS_MANIFEST_COPY_TARGET}\`"
+            if [[ -n "${{ steps.export_outputs.outputs.rootfs_cid }}" ]]; then
+              echo "- Rootfs CID: \`${{ steps.export_outputs.outputs.rootfs_cid }}\`"
+            fi
+            if [[ -n "${{ steps.export_outputs.outputs.rootfs_item_hash }}" ]]; then
+              echo "- Rootfs Aleph item hash: \`${{ steps.export_outputs.outputs.rootfs_item_hash }}\`"
+            fi
+            if [[ -n "${{ steps.export_outputs.outputs.site_url }}" ]]; then
+              echo "- js-peer site URL: ${{ steps.export_outputs.outputs.site_url }}"
+            fi
+            if [[ -n "${{ steps.export_outputs.outputs.manifest_latest_url }}" ]]; then
+              echo "- Latest manifest URL: ${{ steps.export_outputs.outputs.manifest_latest_url }}"
+            else
+              echo "- Latest manifest workspace path: \`js-peer/public/rootfs/uc-go-peer/latest.json\`"
+            fi
+            if [[ -n "${{ steps.export_outputs.outputs.manifest_versioned_url }}" ]]; then
+              echo "- Versioned manifest URL: ${{ steps.export_outputs.outputs.manifest_versioned_url }}"
+            else
+              echo "- Versioned manifest workspace path: \`js-peer/public/rootfs/uc-go-peer/${ROOTFS_VERSION}.json\`"
+            fi
+            if [[ -n "${{ steps.export_outputs.outputs.vm_instance_item_hash }}" ]]; then
+              echo
+              echo "### VM Deployment"
+              echo
+              echo "- VM item hash: \`${{ steps.export_outputs.outputs.vm_instance_item_hash }}\`"
+              echo "- VM status: \`${{ steps.export_outputs.outputs.vm_status }}\`"
+              echo "- VM host IPv4: \`${{ steps.export_outputs.outputs.vm_host_ipv4 }}\`"
+              echo "- VM IPv6: \`${{ steps.export_outputs.outputs.vm_ipv6 }}\`"
+              echo "- VM proxy URL: \`${{ steps.export_outputs.outputs.vm_web_proxy_url }}\`"
+              echo "- VM relay peer ID: \`${{ steps.export_outputs.outputs.vm_relay_peer_id }}\`"
+              echo "- VM SSH command: \`${{ steps.export_outputs.outputs.vm_ssh_command }}\`"
+              echo "- VM verification ok: \`${{ steps.export_outputs.outputs.vm_verification_ok }}\`"
+              echo "- VM protocol probe ok: \`${{ steps.export_outputs.outputs.vm_protocol_probe_ok }}\`"
+              echo "- Browser bootstrap multiaddrs available: \`${{ steps.js_peer_bootstrap.outputs.available || 'false' }}\`"
+              echo
+              echo '```json'
+              printf '%s\n' "${VM_VERIFICATION_JSON}"
+              echo '```'
+              if [[ -n "${{ steps.export_outputs.outputs.vm_browser_bootstrap_multiaddrs_json }}" ]]; then
+                echo
+                echo "#### js-peer Bootstrap Multiaddrs"
+                echo
+                echo '```json'
+                printf '%s\n' "${{ steps.export_outputs.outputs.vm_browser_bootstrap_multiaddrs_json }}"
+                echo '```'
+              fi
+              if [[ -n "${{ steps.export_outputs.outputs.vm_protocol_probe_json }}" ]]; then
+                echo
+                echo "#### Relay Protocol Probe"
+                echo
+                echo '```json'
+                printf '%s\n' "${{ steps.export_outputs.outputs.vm_protocol_probe_json }}"
+                echo '```'
+              fi
+              if [[ -n "${{ steps.export_outputs.outputs.retention_result_json }}" ]]; then
+                echo
+                echo "#### Retention Cleanup"
+                echo
+                echo '```json'
+                printf '%s\n' "${{ steps.export_outputs.outputs.retention_result_json }}"
+                echo '```'
+              fi
+            fi
+            if [[ -f dist-rootfs/rootfs-manifest.json ]]; then
+              echo
+              echo "### Manifest"
+              echo
+              echo '```json'
+              cat dist-rootfs/rootfs-manifest.json
+              echo
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

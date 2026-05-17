@@ -1,5 +1,8 @@
 name: js-peer build
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
   pull-requests: write
@@ -7,32 +10,101 @@ permissions:
 
 on:
   push:
-    branches: [main] # Deploy every commit so we can CIDs for every commit on main
+    paths:
+      - 'js-peer/**'
+      - '.github/workflows/js-peer.yml'
   pull_request:
     branches: [main]
     paths:
-      - 'js-peer/**' # only run for PRs changing js-peer
+      - 'js-peer/**'
+      - '.github/workflows/js-peer.yml'
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
     defaults:
       run:
         working-directory: js-peer
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20.x'
+          node-version: '24.x'
       - run: npm ci
       - run: npm run lint
       - run: npm run build
-      - uses: ipfs/ipfs-deploy-action@v1
-        name: Deploy to IPFS
+      - name: Debug Aleph inputs
+        run: |
+          if [[ -n "$ALEPH_PRIVATE_KEY" ]]; then
+            echo "ALEPH_PRIVATE_KEY is set"
+          else
+            echo "ALEPH_PRIVATE_KEY is missing"
+          fi
+          if [[ -n "${{ vars.ALEPH_DOMAIN }}" ]]; then
+            echo "ALEPH_DOMAIN=${{ vars.ALEPH_DOMAIN }}"
+          else
+            echo "ALEPH_DOMAIN is missing"
+          fi
+          echo "github.event_name=${{ github.event_name }}"
+          echo "github.ref=${{ github.ref }}"
+      - name: Deploy preview on Aleph for PRs
         id: deploy
+        if: github.event_name == 'pull_request'
+        uses: aleph-im/web3-hosting-action@v1.1.4
         with:
-          # 👇 note that working-directory doesn't apply to action steps with `uses`, so we need to specify the full path
-          path-to-deploy: js-peer/out
-          storacha-key: ${{ secrets.STORACHA_KEY }}
-          storacha-proof: ${{ secrets.STORACHA_PROOF }}
-          github-token: ${{ github.token }}
+          path: js-peer/out
+      - name: Deploy preview on Aleph for branch pushes
+        id: deploy_branch
+        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+        uses: aleph-im/web3-hosting-action@v1.1.4
+        with:
+          path: js-peer/out
+          private-key: ${{ env.ALEPH_PRIVATE_KEY }}
+          retention_days: ${{ vars.ALEPH_RETENTION_DAYS }}
+      - name: Summarize Aleph preview deployment
+        if: (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref != 'refs/heads/main')
+        run: |
+          {
+            echo '## Aleph Preview Deployment'
+            echo
+            if [[ -n "${URL:-}" ]]; then
+              echo "- URL: ${URL}"
+            fi
+            if [[ -n "${ITEM_HASH:-}" ]]; then
+              echo "- Item hash: ${ITEM_HASH}"
+            fi
+            if [[ -n "${CID:-}" ]]; then
+              echo "- CID: ${CID}"
+            fi
+            if [[ -z "${URL:-}${ITEM_HASH:-}${CID:-}" ]]; then
+              echo '- Preview deployment finished, but no URL/CID output was exposed by the action.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Deploy production on Aleph
+        id: deploy_prod
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.ALEPH_PRIVATE_KEY != ''
+        uses: aleph-im/web3-hosting-action@v1.1.4
+        with:
+          path: js-peer/out
+          private-key: ${{ env.ALEPH_PRIVATE_KEY }}
+          retention_days: ${{ vars.ALEPH_RETENTION_DAYS }}
+      - name: Install Aleph client for domain link
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.ALEPH_PRIVATE_KEY != '' && vars.ALEPH_DOMAIN != ''
+        working-directory: .
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install aleph-client pycares==4.11.0
+      - name: Link production domain on Aleph as IPFS
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.ALEPH_PRIVATE_KEY != '' && vars.ALEPH_DOMAIN != ''
+        working-directory: .
+        run: |
+          if [[ -z "${ITEM_HASH:-}" ]]; then
+            echo "ITEM_HASH is missing after Aleph deployment"
+            exit 1
+          fi
+          mkdir -p /home/runner/.aleph-im/private-keys
+          echo "$ALEPH_PRIVATE_KEY" | xxd -r -p > /home/runner/.aleph-im/private-keys/ethereum.key
+          aleph domain detach "${{ vars.ALEPH_DOMAIN }}" --no-ask || true
+          aleph domain attach "${{ vars.ALEPH_DOMAIN }}" --item-hash "$ITEM_HASH" --catch-all-path /index.html --no-ask
