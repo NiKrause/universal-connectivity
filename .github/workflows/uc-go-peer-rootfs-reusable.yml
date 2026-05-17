@@ -340,6 +340,7 @@ jobs:
           cd "$workdir"
           npm init -y >/dev/null 2>&1
           npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          export ALEPH_SITE_PUBLISH_SCRIPT="$workdir/node_modules/@le-space/node/reference/publish-static-site.py"
           node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
 
       - name: Link production domain through shared runner
@@ -466,6 +467,7 @@ jobs:
           cd "$workdir"
           npm init -y >/dev/null 2>&1
           npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          export ALEPH_SITE_PUBLISH_SCRIPT="$workdir/node_modules/@le-space/node/reference/publish-static-site.py"
           node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
 
       - name: Relink production domain through shared runner
