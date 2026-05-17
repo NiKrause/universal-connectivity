@@ -302,6 +302,8 @@ jobs:
           ALEPH_ROOTFS_CONTRACT_PATH: ${{ env.ROOTFS_CONTRACT_FILE }}
           ALEPH_ROOTFS_VERSION: ${{ env.ROOTFS_VERSION }}
           ALEPH_ROOTFS_SKIP_UPLOAD: ${{ inputs.publish && 'false' || 'true' }}
+          ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_DELAY_SECONDS: '5'
           ALEPH_ROOTFS_HAS_VIRT_CUSTOMIZE: 'true'
           ALEPH_ROOTFS_HAS_DOCKER: 'false'
         run: |
@@ -331,6 +333,8 @@ jobs:
           ALEPH_VM_MODE: site-publish
           ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
           ALEPH_SITE_DIRECTORY: js-peer/out
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
         run: |
           workdir="$(mktemp -d)"
           cd "$workdir"
@@ -455,6 +459,8 @@ jobs:
           ALEPH_VM_MODE: site-publish
           ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
           ALEPH_SITE_DIRECTORY: js-peer/out
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
         run: |
           workdir="$(mktemp -d)"
           cd "$workdir"
