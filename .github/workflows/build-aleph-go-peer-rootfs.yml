@@ -1,0 +1,97 @@
+name: Build uc-go-peer rootfs
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the built qcow2 to Aleph
+        required: true
+        default: false
+        type: boolean
+      rootfs_version:
+        description: Optional explicit version override for the generated rootfs manifest
+        required: false
+        type: string
+      deploy_vm:
+        description: Deploy a uc-go-peer VM after publish and verify its reachable ports
+        required: false
+        default: false
+        type: boolean
+      vm_name:
+        description: Aleph VM instance name
+        required: false
+        default: uc-go-peer
+        type: string
+      vm_ssh_public_key:
+        description: Optional SSH public key override for the deployed VM
+        required: false
+        type: string
+      vm_crn_hash:
+        description: Optional target CRN hash for the uc-go-peer deployment
+        required: false
+        type: string
+      vm_vcpus:
+        description: Requested vCPU count for the uc-go-peer VM
+        required: false
+        default: '1'
+        type: string
+      vm_memory_mib:
+        description: Requested memory in MiB for the uc-go-peer VM
+        required: false
+        default: '1024'
+        type: string
+      vm_rootfs_size_mib:
+        description: Rootfs disk size in MiB for the deployed uc-go-peer VM
+        required: false
+        default: '20480'
+        type: string
+      vm_preferred_country_code:
+        description: Preferred two-letter country code for automatic CRN selection
+        required: false
+        default: DE
+        type: string
+      vm_geo_crn_limit:
+        description: Maximum number of top-ranked CRNs to geolocate when preferring a country
+        required: false
+        default: '30'
+        type: string
+      vm_max_crn_attempts:
+        description: Maximum number of distinct CRNs to try when Aleph rejects a deployment
+        required: false
+        default: '5'
+        type: string
+      vm_enable_caddy_proxy:
+        description: Also configure the Aleph web proxy hostname and guest Caddy for secure WSS on 443
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uc-go-peer-rootfs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-rootfs:
+    uses: ./.github/workflows/uc-go-peer-rootfs-reusable.yml
+    with:
+      publish: ${{ inputs.publish }}
+      rootfs_version: ${{ inputs.rootfs_version || '' }}
+      aleph_domain: ${{ vars.ALEPH_DOMAIN || '' }}
+      aleph_retention_days: ${{ vars.ALEPH_RETENTION_DAYS || '' }}
+      deploy_vm: ${{ inputs.deploy_vm }}
+      vm_name: ${{ inputs.vm_name || 'uc-go-peer' }}
+      vm_ssh_public_key: ${{ inputs.vm_ssh_public_key || '' }}
+      vm_crn_hash: ${{ inputs.vm_crn_hash || vars.ALEPH_VM_CRN_HASH || '' }}
+      vm_vcpus: ${{ inputs.vm_vcpus || '1' }}
+      vm_memory_mib: ${{ inputs.vm_memory_mib || '1024' }}
+      vm_rootfs_size_mib: ${{ inputs.vm_rootfs_size_mib || '20480' }}
+      vm_preferred_country_code: ${{ inputs.vm_preferred_country_code || 'DE' }}
+      vm_geo_crn_limit: ${{ inputs.vm_geo_crn_limit || '30' }}
+      vm_max_crn_attempts: ${{ inputs.vm_max_crn_attempts || '5' }}
+      vm_enable_caddy_proxy: ${{ inputs.vm_enable_caddy_proxy }}
+    secrets:
+      ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
+      VM_SSH_PUBLIC_KEY: ${{ secrets.VM_SSH_PUBLIC_KEY }}
