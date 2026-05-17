@@ -5,6 +5,7 @@
     "start": "npx esbuild src/App.tsx --outfile=.dist/index.js --bundle --platform=node --format=esm --external:'./node_modules/*' --sourcemap && node --enable-source-maps .dist",
     "dist": "npx esbuild src/App.tsx --outfile=.dist/index.cjs --bundle --platform=node --define:'process.env.NODE_ENV=\"production\"' --minify --tree-shaking=true",
     "generate": "protons protobuf/*.proto",
+    "probe:relay": "node scripts/probe-relay.mjs",
     "format": "prettier --write src",
     "lint": "prettier . --check"
   },
