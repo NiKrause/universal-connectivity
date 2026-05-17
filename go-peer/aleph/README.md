@@ -36,7 +36,7 @@ published packages:
 - `@le-space/rootfs`
 - `@le-space/node`
 
-That shared tooling owns:
+That Aleph tooling owns:
 
 - RootFS build orchestration
 - qcow2 customization scripts
@@ -47,7 +47,7 @@ That shared tooling owns:
 - site publish, probe, bootstrap, and domain-link helpers
 - deployment retention cleanup
 
-So from the UC maintainer perspective, this repo mainly defines:
+This repo mainly defines:
 
 - the UC RootFS contract
 - the UC workflow orchestration
