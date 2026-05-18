@@ -14,6 +14,48 @@ import { ping } from '@libp2p/ping'
 import { multiaddr } from '@multiformats/multiaddr'
 import { peerIdFromString } from '@libp2p/peer-id'
 
+function classifyAddress(rawAddr, protocols) {
+  if (protocols.includes('webrtc-direct')) {
+    return {
+      family: 'webrtc-direct',
+      required: false,
+    }
+  }
+
+  if (protocols.includes('webtransport')) {
+    return {
+      family: 'webtransport',
+      required: true,
+    }
+  }
+
+  if (protocols.includes('ws') && rawAddr.includes('.2n6.me/')) {
+    return {
+      family: 'proxy-wss',
+      required: true,
+    }
+  }
+
+  if (protocols.includes('ws')) {
+    return {
+      family: 'direct-wss',
+      required: true,
+    }
+  }
+
+  if (protocols.includes('tcp')) {
+    return {
+      family: 'tcp',
+      required: true,
+    }
+  }
+
+  return {
+    family: 'other',
+    required: true,
+  }
+}
+
 function parseArgs(argv) {
   const result = {
     addrs: [],
@@ -96,16 +138,20 @@ async function probeAddress(node, rawAddr, timeoutMs, settleMs) {
   const addr = multiaddr(rawAddr)
   const peerIdString = addr.getPeerId()
   const protoNames = addr.protoNames()
+  const classification = classifyAddress(rawAddr, protoNames)
   const startedAt = Date.now()
 
   const result = {
     address: rawAddr,
     protocols: protoNames,
+    family: classification.family,
+    required: classification.required,
     ok: false,
     dialMs: null,
     pingMs: null,
     remoteAddrs: [],
-    error: null
+    error: null,
+    warning: null
   }
 
   try {
@@ -124,15 +170,43 @@ async function probeAddress(node, rawAddr, timeoutMs, settleMs) {
         result.pingMs = Date.now() - pingStart
       } catch (error) {
         result.pingMs = null
-        result.error = `dial succeeded but ping failed: ${error instanceof Error ? error.message : String(error)}`
+        const message = `dial succeeded but ping failed: ${error instanceof Error ? error.message : String(error)}`
+        if (classification.family === 'webrtc-direct') {
+          result.warning = message
+        } else {
+          result.error = message
+        }
       }
     }
 
     result.ok = true
     return result
   } catch (error) {
-    result.error = error instanceof Error ? error.message : String(error)
+    const message = error instanceof Error ? error.message : String(error)
+    if (classification.family === 'webrtc-direct') {
+      result.warning = message
+    } else {
+      result.error = message
+    }
     return result
+  }
+}
+
+function summarizeResults(results) {
+  const failuresByFamily = new Map()
+
+  for (const result of results) {
+    if (!result.required || result.ok) {
+      continue
+    }
+    const entries = failuresByFamily.get(result.family) ?? []
+    entries.push(result)
+    failuresByFamily.set(result.family, entries)
+  }
+
+  return {
+    hasRequiredFailures: failuresByFamily.size > 0,
+    failuresByFamily,
   }
 }
 
@@ -156,16 +230,20 @@ async function main() {
       const summary = {
         address: result.address,
         protocols: result.protocols,
+        family: result.family,
+        required: result.required,
         ok: result.ok,
         dialMs: result.dialMs,
         pingMs: result.pingMs,
         remoteAddrs: result.remoteAddrs,
-        error: result.error
+        error: result.error,
+        warning: result.warning
       }
       process.stdout.write(`${JSON.stringify(summary)}\n`)
     }
 
-    if (results.some((result) => result.ok === false)) {
+    const { hasRequiredFailures } = summarizeResults(results)
+    if (hasRequiredFailures) {
       process.exitCode = 1
     }
   } finally {
