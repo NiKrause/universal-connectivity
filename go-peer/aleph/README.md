@@ -83,6 +83,20 @@ That is why the workflow can publish `js-peer` twice:
 This is especially important for Aleph because the externally reachable relay
 ports are assigned by the VM runtime and are not known ahead of time.
 
+In the current production path on `main`, that means:
+
+1. publish an initial `js-peer` site and manifest
+2. link the configured production domain to that initial site when
+   `ALEPH_DOMAIN` is set
+3. deploy and inspect the VM
+4. rebuild and republish `js-peer` with the final browser bootstrap addresses
+5. relink the production domain to the final republished site
+
+When the second publish happens, retention cleanup can also forget the
+superseded initial site `STORE` message from the same run, so the final site
+artifact is the one that remains referenced by the domain and the successful
+deployment aggregate.
+
 ## AutoTLS, Direct WSS, And Proxy WSS
 
 There are two browser-relevant secure websocket paths:
@@ -133,6 +147,26 @@ In short:
 - AutoTLS / direct WSS is ideal when available
 - proxy / Caddy WSS is the compatibility path for restrictive networks
 
+## Relay Probe Policy
+
+After guest configuration, the workflow probes the returned relay multiaddrs.
+
+The current policy is:
+
+- required probe families:
+  - direct TCP
+  - direct WSS via `libp2p.direct`
+  - proxy WSS via the Aleph proxy hostname when enabled
+  - WebTransport
+- best-effort probe family:
+  - `webrtc-direct`
+
+Operationally, `webrtc-direct` was more fragile than the required transports.
+The workflow still records `webrtc-direct` warnings in probe output for
+debugging, but a `webrtc-direct` parsing or ping failure does not block the
+publish, republish, domain-link, or retention path as long as the required
+transports succeeded.
+
 ## Current Guest Model
 
 The UC contract currently uses:
@@ -157,3 +191,7 @@ runtime from scratch after boot.
   lives in `shared-aleph-tooling`, not here.
 - If you need to change the UC deployment contract, ports, manifest notes, or
   workflow behavior, this repo is the right place.
+- Retention currently keeps the latest two successful published+deployed
+  records, prunes older deployment records and their dependent `STORE`
+  messages, and may also prune the initial site publish from the newest run
+  after the final republished site replaces it.
