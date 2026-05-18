@@ -2,7 +2,7 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.1.18
+  SHARED_ALEPH_NODE_VERSION: 0.1.19
 
 on:
   workflow_call:
@@ -302,6 +302,8 @@ jobs:
           ALEPH_ROOTFS_CONTRACT_PATH: ${{ env.ROOTFS_CONTRACT_FILE }}
           ALEPH_ROOTFS_VERSION: ${{ env.ROOTFS_VERSION }}
           ALEPH_ROOTFS_SKIP_UPLOAD: ${{ inputs.publish && 'false' || 'true' }}
+          ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_DELAY_SECONDS: '5'
           ALEPH_ROOTFS_HAS_VIRT_CUSTOMIZE: 'true'
           ALEPH_ROOTFS_HAS_DOCKER: 'false'
         run: |
@@ -331,11 +333,14 @@ jobs:
           ALEPH_VM_MODE: site-publish
           ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
           ALEPH_SITE_DIRECTORY: js-peer/out
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
         run: |
           workdir="$(mktemp -d)"
           cd "$workdir"
           npm init -y >/dev/null 2>&1
           npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          export ALEPH_SITE_PUBLISH_SCRIPT="$workdir/node_modules/@le-space/node/reference/publish-static-site.py"
           node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
 
       - name: Link production domain through shared runner
@@ -455,11 +460,14 @@ jobs:
           ALEPH_VM_MODE: site-publish
           ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
           ALEPH_SITE_DIRECTORY: js-peer/out
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
         run: |
           workdir="$(mktemp -d)"
           cd "$workdir"
           npm init -y >/dev/null 2>&1
           npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          export ALEPH_SITE_PUBLISH_SCRIPT="$workdir/node_modules/@le-space/node/reference/publish-static-site.py"
           node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
 
       - name: Relink production domain through shared runner

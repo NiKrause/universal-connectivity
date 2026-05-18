@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ipfs/go-log/v2"
@@ -42,6 +43,45 @@ const DefaultRoom = "universal-connectivity"
 var SysMsgChan chan *ChatMessage
 
 var logger = log.Logger("app")
+
+func parseAnnounceAddrs(raw string) ([]multiaddr.Multiaddr, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+
+	entries := strings.Split(raw, ",")
+	addrs := make([]multiaddr.Multiaddr, 0, len(entries))
+	for _, entry := range entries {
+		candidate := strings.TrimSpace(entry)
+		if candidate == "" {
+			continue
+		}
+		addr, err := multiaddr.NewMultiaddr(candidate)
+		if err != nil {
+			return nil, fmt.Errorf("parse LIBP2P_ANNOUNCE_ADDRS entry %q: %w", candidate, err)
+		}
+		addrs = append(addrs, addr)
+	}
+
+	return dedupeMultiaddrs(addrs), nil
+}
+
+func dedupeMultiaddrs(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
+	seen := make(map[string]struct{}, len(addrs))
+	result := make([]multiaddr.Multiaddr, 0, len(addrs))
+	for _, addr := range addrs {
+		if addr == nil {
+			continue
+		}
+		key := addr.String()
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, addr)
+	}
+	return result
+}
 
 // Borrowed from https://medium.com/rahasak/libp2p-pubsub-peer-discovery-with-kademlia-dht-c8b131550ac7
 // NewDHT attempts to connect to a bunch of bootstrap peers and returns a new DHT.
@@ -112,6 +152,8 @@ func main() {
 	roomFlag := flag.String("room", DefaultRoom, "the gossipsub topic / room to join (mDNS only)")
 	headless := flag.Bool("headless", false, "run without chat UI")
 	port := flag.String("port", "9095", "port to listen on")
+	wsPort := flag.String("ws-port", "9096", "port to listen on for plain websocket transports")
+	wssPort := flag.String("wss-port", "9097", "port to listen on for secure websocket transports")
 
 	var addrsToConnectTo stringSlice
 	flag.Var(&addrsToConnectTo, "connect", "address to connect to (can be used multiple times)")
@@ -169,6 +211,20 @@ func main() {
 		panic(err)
 	}
 
+	announceAddrs, err := parseAnnounceAddrs(os.Getenv("LIBP2P_ANNOUNCE_ADDRS"))
+	if err != nil {
+		panic(err)
+	}
+
+	autoTLSAddrsFactory := certManager.AddressFactory()
+	combinedAddrsFactory := func(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
+		withAnnounce := dedupeMultiaddrs(append(append([]multiaddr.Multiaddr{}, addrs...), announceAddrs...))
+		if autoTLSAddrsFactory == nil {
+			return withAnnounce
+		}
+		return dedupeMultiaddrs(autoTLSAddrsFactory(withAnnounce))
+	}
+
 	// Configure libp2p options with AutoTLS
 	opts := []libp2p.Option{
 		libp2p.Identity(privk),
@@ -182,8 +238,10 @@ func main() {
 			"/ip6/::/udp/"+*port+"/quic-v1",
 			"/ip6/::/udp/"+*port+"/quic-v1/webtransport",
 			"/ip6/::/udp/"+*port+"/webrtc-direct",
-			fmt.Sprintf("/ip4/0.0.0.0/tcp/"+*port+"/tls/sni/*.%s/ws", p2pforge.DefaultForgeDomain),
-			fmt.Sprintf("/ip6/::/tcp/"+*port+"/tls/sni/*.%s/ws", p2pforge.DefaultForgeDomain),
+			"/ip4/0.0.0.0/tcp/"+*wsPort+"/ws",
+			"/ip6/::/tcp/"+*wsPort+"/ws",
+			fmt.Sprintf("/ip4/0.0.0.0/tcp/"+*wssPort+"/tls/sni/*.%s/ws", p2pforge.DefaultForgeDomain),
+			fmt.Sprintf("/ip6/::/tcp/"+*wssPort+"/tls/sni/*.%s/ws", p2pforge.DefaultForgeDomain),
 		),
 		libp2p.ResourceManager(getResourceManager()),
 		libp2p.Transport(webtransport.New),
@@ -199,7 +257,7 @@ func main() {
 
 		libp2p.UserAgent("universal-connectivity/go-peer"),
 
-		libp2p.AddrsFactory(certManager.AddressFactory()),
+		libp2p.AddrsFactory(combinedAddrsFactory),
 	}
 
 	// Create a new libp2p Host
