@@ -2,7 +2,7 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.1.44
+  SHARED_ALEPH_NODE_VERSION: 0.1.45
 
 on:
   workflow_call:
@@ -299,6 +299,8 @@ jobs:
           ALEPH_SITE_DIRECTORY: js-peer/out
           ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
           ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
+          ALEPH_SITE_REF: uc-go-peer-prod
+          ALEPH_SITE_RETENTION_KEEP_COUNT: '10'
         run: |
           workdir="$(mktemp -d)"
           cd "$workdir"
@@ -426,6 +428,8 @@ jobs:
           ALEPH_SITE_DIRECTORY: js-peer/out
           ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
           ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
+          ALEPH_SITE_REF: uc-go-peer-prod
+          ALEPH_SITE_RETENTION_KEEP_COUNT: '10'
         run: |
           workdir="$(mktemp -d)"
           cd "$workdir"
