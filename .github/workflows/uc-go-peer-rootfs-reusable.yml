@@ -2,7 +2,7 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.1.19
+  SHARED_ALEPH_NODE_VERSION: 0.1.44
 
 on:
   workflow_call:
@@ -263,37 +263,6 @@ jobs:
             squashfs-tools \
             tar
 
-      - name: Install aleph client
-        if: ${{ inputs.publish }}
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install aleph-client
-          python3 -m pip install pycares==4.11.0
-
-      - name: Prepare Aleph account
-        if: ${{ inputs.publish }}
-        run: |
-          mkdir -p "$HOME/.aleph-im/private-keys"
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          private_key = os.environ["ALEPH_PRIVATE_KEY"].strip()
-          if private_key.startswith("0x"):
-              private_key = private_key[2:]
-
-          key_bytes = bytes.fromhex(private_key)
-          config_home = Path.home() / ".aleph-im"
-          key_path = config_home / "private-keys" / "aleph-vm.key"
-          config_path = config_home / "config.json"
-
-          key_path.write_bytes(key_bytes)
-          config_path.write_text(json.dumps({"chain": "ETH", "path": str(key_path)}))
-          print(f"Wrote Aleph key to {key_path}")
-          print(f"Wrote Aleph config to {config_path}")
-          PY
-
       - name: Build uc-go-peer rootfs through shared runner
         id: build_rootfs
         env:
@@ -313,12 +282,6 @@ jobs:
           npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
           node --input-type=module -e "import { runRootfsMode } from '@le-space/node'; await runRootfsMode(process.env);"
 
-      - name: Install js-peer publish helpers
-        if: ${{ inputs.publish }}
-        working-directory: universal-connectivity
-        run: |
-          python3 -m pip install requests 'py-cid @ git+https://github.com/ipld/py-cid.git@b13b51774ac3309c3c28a8da6eeab6d1e75dcddc'
-
       - name: Build js-peer site with latest rootfs manifest
         if: ${{ inputs.publish }}
         working-directory: universal-connectivity/js-peer
@@ -330,6 +293,7 @@ jobs:
         if: ${{ inputs.publish }}
         id: deploy_site
         env:
+          ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
           ALEPH_VM_MODE: site-publish
           ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
           ALEPH_SITE_DIRECTORY: js-peer/out
@@ -340,7 +304,6 @@ jobs:
           cd "$workdir"
           npm init -y >/dev/null 2>&1
           npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
-          export ALEPH_SITE_PUBLISH_SCRIPT="$workdir/node_modules/@le-space/node/reference/publish-static-site.py"
           node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
 
       - name: Link production domain through shared runner
@@ -457,6 +420,7 @@ jobs:
         if: ${{ inputs.publish && inputs.deploy_vm && steps.js_peer_bootstrap.outputs.available == 'true' }}
         id: redeploy_site
         env:
+          ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
           ALEPH_VM_MODE: site-publish
           ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
           ALEPH_SITE_DIRECTORY: js-peer/out
@@ -467,7 +431,6 @@ jobs:
           cd "$workdir"
           npm init -y >/dev/null 2>&1
           npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
-          export ALEPH_SITE_PUBLISH_SCRIPT="$workdir/node_modules/@le-space/node/reference/publish-static-site.py"
           node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
 
       - name: Relink production domain through shared runner
