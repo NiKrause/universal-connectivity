@@ -14,45 +14,75 @@ import { ping } from '@libp2p/ping'
 import { multiaddr } from '@multiformats/multiaddr'
 import { peerIdFromString } from '@libp2p/peer-id'
 
-function classifyAddress(rawAddr, protocols) {
+function parseJsonEnv(name, fallback) {
+  const rawValue = process.env[name]
+  if (rawValue == null || rawValue.trim() === '') {
+    return fallback
+  }
+
+  try {
+    return JSON.parse(rawValue)
+  } catch (error) {
+    throw new Error(`Invalid JSON in ${name}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+function getPolicy() {
+  const requiredFamilies = new Set(parseJsonEnv('ALEPH_RELAY_PROBE_REQUIRED_FAMILIES_JSON', [
+    'tcp',
+    'direct-wss',
+    'proxy-wss',
+    'webtransport'
+  ]))
+  const bestEffortFamilies = new Set(parseJsonEnv('ALEPH_RELAY_PROBE_BEST_EFFORT_FAMILIES_JSON', ['webrtc-direct']))
+  const proxyWssHostMatchers = parseJsonEnv('ALEPH_RELAY_PROBE_PROXY_WSS_HOST_MATCHERS_JSON', ['.2n6.me/'])
+
+  return {
+    requiredFamilies,
+    bestEffortFamilies,
+    proxyWssHostMatchers,
+  }
+}
+
+function classifyAddress(rawAddr, protocols, policy) {
   if (protocols.includes('webrtc-direct')) {
     return {
       family: 'webrtc-direct',
-      required: false,
+      required: policy.requiredFamilies.has('webrtc-direct'),
     }
   }
 
   if (protocols.includes('webtransport')) {
     return {
       family: 'webtransport',
-      required: true,
+      required: policy.requiredFamilies.has('webtransport'),
     }
   }
 
-  if (protocols.includes('ws') && rawAddr.includes('.2n6.me/')) {
+  if (protocols.includes('ws') && policy.proxyWssHostMatchers.some((matcher) => rawAddr.includes(matcher))) {
     return {
       family: 'proxy-wss',
-      required: true,
+      required: policy.requiredFamilies.has('proxy-wss'),
     }
   }
 
   if (protocols.includes('ws')) {
     return {
       family: 'direct-wss',
-      required: true,
+      required: policy.requiredFamilies.has('direct-wss'),
     }
   }
 
   if (protocols.includes('tcp')) {
     return {
       family: 'tcp',
-      required: true,
+      required: policy.requiredFamilies.has('tcp'),
     }
   }
 
   return {
     family: 'other',
-    required: true,
+    required: policy.requiredFamilies.has('other'),
   }
 }
 
@@ -134,11 +164,11 @@ async function createProbeNode() {
   })
 }
 
-async function probeAddress(node, rawAddr, timeoutMs, settleMs) {
+async function probeAddress(node, rawAddr, timeoutMs, settleMs, policy) {
   const addr = multiaddr(rawAddr)
   const peerIdString = addr.getPeerId()
   const protoNames = addr.protoNames()
-  const classification = classifyAddress(rawAddr, protoNames)
+  const classification = classifyAddress(rawAddr, protoNames, policy)
   const startedAt = Date.now()
 
   const result = {
@@ -171,7 +201,7 @@ async function probeAddress(node, rawAddr, timeoutMs, settleMs) {
       } catch (error) {
         result.pingMs = null
         const message = `dial succeeded but ping failed: ${error instanceof Error ? error.message : String(error)}`
-        if (classification.family === 'webrtc-direct') {
+        if (policy.bestEffortFamilies.has(classification.family)) {
           result.warning = message
         } else {
           result.error = message
@@ -183,7 +213,7 @@ async function probeAddress(node, rawAddr, timeoutMs, settleMs) {
     return result
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    if (classification.family === 'webrtc-direct') {
+    if (policy.bestEffortFamilies.has(classification.family)) {
       result.warning = message
     } else {
       result.error = message
@@ -212,6 +242,7 @@ function summarizeResults(results) {
 
 async function main() {
   const { addrs, timeoutMs, settleMs } = parseArgs(process.argv.slice(2))
+  const policy = getPolicy()
   if (addrs.length === 0) {
     usage()
     process.exitCode = 1
@@ -222,7 +253,7 @@ async function main() {
   try {
     const results = []
     for (const addr of addrs) {
-      const result = await probeAddress(node, addr, timeoutMs, settleMs)
+      const result = await probeAddress(node, addr, timeoutMs, settleMs, policy)
       results.push(result)
     }
 

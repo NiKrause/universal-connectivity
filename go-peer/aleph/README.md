@@ -26,6 +26,9 @@ that process without owning a second full copy of the reusable Aleph tooling.
   The UC workflow that coordinates the whole Aleph lifecycle.
 - [../../../.github/actions/aleph-vm-deploy/action.yml](../../../.github/actions/aleph-vm-deploy/action.yml)
   Thin compatibility wrapper around the published Aleph deploy runner.
+- [./relay-probe-policy.json](./relay-probe-policy.json)
+  The UC-owned relay probe policy contract that the workflow loads before
+  running post-deploy relay verification.
 
 ## What The Shared Tooling Owns
 
@@ -150,6 +153,27 @@ In short:
 
 After guest configuration, the workflow probes the returned relay multiaddrs.
 
+The ownership split for that probe should be:
+
+- shared-aleph-tooling owns the probe runner implementation
+- `universal-connectivity` owns the policy contract in
+  `go-peer/aleph/relay-probe-policy.json`
+- `.github/workflows/uc-go-peer-rootfs-reusable.yml` loads that file and passes
+  the resolved values into the probe runner through environment variables
+
+Today the UC policy contract is:
+
+- file:
+  - `go-peer/aleph/relay-probe-policy.json`
+- workflow loader:
+  - `.github/workflows/uc-go-peer-rootfs-reusable.yml`
+- current env contract passed to the runner:
+  - `ALEPH_RELAY_PROBE_REQUIRED_FAMILIES_JSON`
+  - `ALEPH_RELAY_PROBE_BEST_EFFORT_FAMILIES_JSON`
+  - `ALEPH_RELAY_PROBE_PROXY_WSS_HOST_MATCHERS_JSON`
+  - `PROBE_TIMEOUT_MS`
+  - `PROBE_SETTLE_MS`
+
 The current policy is:
 
 - required probe families:
@@ -165,6 +189,14 @@ The workflow still records `webrtc-direct` warnings in probe output for
 debugging, but a `webrtc-direct` parsing or ping failure does not block the
 publish, republish, domain-link, or retention path as long as the required
 transports succeeded.
+
+The current concrete values in `relay-probe-policy.json` are:
+
+- `requiredFamilies`: `["tcp","direct-wss","proxy-wss","webtransport"]`
+- `bestEffortFamilies`: `["webrtc-direct"]`
+- `proxyWssHostMatchers`: `[".2n6.me/"]`
+- `timeoutMs`: `20000`
+- `settleMs`: `1500`
 ## Current Guest Model
 
 The UC contract currently uses:

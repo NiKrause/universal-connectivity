@@ -224,6 +224,24 @@ jobs:
           print(f"ROOTFS_MANIFEST_COPY_TARGET={manifest['copyTarget']}")
           PY
 
+      - name: Load relay probe policy
+        working-directory: universal-connectivity
+        run: |
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          from pathlib import Path
+
+          policy = json.loads(Path("go-peer/aleph/relay-probe-policy.json").read_text())
+
+          print("ALEPH_RELAY_PROBE_POLICY_FILE=${{ github.workspace }}/universal-connectivity/go-peer/aleph/relay-probe-policy.json")
+          print(f"ALEPH_RELAY_PROBE_POLICY_VERSION={policy['version']}")
+          print(f"ALEPH_RELAY_PROBE_REQUIRED_FAMILIES_JSON={json.dumps(policy['requiredFamilies'])}")
+          print(f"ALEPH_RELAY_PROBE_BEST_EFFORT_FAMILIES_JSON={json.dumps(policy['bestEffortFamilies'])}")
+          print(f"ALEPH_RELAY_PROBE_PROXY_WSS_HOST_MATCHERS_JSON={json.dumps(policy['proxyWssHostMatchers'])}")
+          print(f"PROBE_TIMEOUT_MS={policy['timeoutMs']}")
+          print(f"PROBE_SETTLE_MS={policy['settleMs']}")
+          PY
+
       - name: Derive rootfs version
         working-directory: universal-connectivity
         run: |
@@ -390,6 +408,11 @@ jobs:
           ALEPH_VM_MODE: relay-probe
           ALEPH_SITE_PROBE_WORKDIR: ${{ github.workspace }}/universal-connectivity/node-js-peer
           ALEPH_SITE_PROBE_SCRIPT: ${{ github.workspace }}/universal-connectivity/node-js-peer/scripts/probe-relay.mjs
+          ALEPH_RELAY_PROBE_REQUIRED_FAMILIES_JSON: ${{ env.ALEPH_RELAY_PROBE_REQUIRED_FAMILIES_JSON }}
+          ALEPH_RELAY_PROBE_BEST_EFFORT_FAMILIES_JSON: ${{ env.ALEPH_RELAY_PROBE_BEST_EFFORT_FAMILIES_JSON }}
+          ALEPH_RELAY_PROBE_PROXY_WSS_HOST_MATCHERS_JSON: ${{ env.ALEPH_RELAY_PROBE_PROXY_WSS_HOST_MATCHERS_JSON }}
+          PROBE_TIMEOUT_MS: ${{ env.PROBE_TIMEOUT_MS }}
+          PROBE_SETTLE_MS: ${{ env.PROBE_SETTLE_MS }}
           PROBE_MULTIADDRS_JSON: ${{ steps.deploy_vm.outputs.probe_multiaddrs_json }}
           BROWSER_BOOTSTRAP_MULTIADDRS_JSON: ${{ steps.deploy_vm.outputs.browser_bootstrap_multiaddrs_json }}
         run: |
@@ -412,16 +435,43 @@ jobs:
           npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
           node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
 
-      - name: Rebuild js-peer site with deployed relay bootstrap addrs
-        if: ${{ inputs.publish && inputs.deploy_vm && steps.js_peer_bootstrap.outputs.available == 'true' }}
-        working-directory: universal-connectivity/js-peer
+      - name: Patch js-peer bootstrap peer id
+        if: ${{ inputs.publish && inputs.deploy_vm && steps.deploy_vm.outputs.relay_peer_id != '' }}
+        working-directory: universal-connectivity
         env:
-          NEXT_PUBLIC_RELAY_LISTEN_ADDRS: ${{ steps.js_peer_bootstrap.outputs.csv }}
+          RELAY_PEER_ID: ${{ steps.deploy_vm.outputs.relay_peer_id }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          relay_peer_id = os.environ["RELAY_PEER_ID"].strip()
+          constants_path = Path("js-peer/src/lib/constants.ts")
+          source = constants_path.read_text()
+
+          updated = re.sub(
+              r"(export const WEBTRANSPORT_BOOTSTRAP_PEER_ID = ')[^']+(')",
+              rf"\g<1>{relay_peer_id}\2",
+              source,
+              count=1,
+          )
+
+          if updated == source:
+              raise SystemExit("Failed to update WEBTRANSPORT_BOOTSTRAP_PEER_ID in js-peer/src/lib/constants.ts")
+
+          constants_path.write_text(updated)
+          print(f"Updated {constants_path} to relay peer ID {relay_peer_id}")
+          PY
+
+      - name: Rebuild js-peer site with deployed relay bootstrap addrs
+        if: ${{ inputs.publish && inputs.deploy_vm && steps.deploy_vm.outputs.relay_peer_id != '' }}
+        working-directory: universal-connectivity/js-peer
         run: |
           npm run build
 
       - name: Publish republished js-peer site through shared runner
-        if: ${{ inputs.publish && inputs.deploy_vm && steps.js_peer_bootstrap.outputs.available == 'true' }}
+        if: ${{ inputs.publish && inputs.deploy_vm && steps.deploy_vm.outputs.relay_peer_id != '' }}
         id: redeploy_site
         env:
           ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
@@ -440,7 +490,7 @@ jobs:
           node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
 
       - name: Relink production domain through shared runner
-        if: ${{ inputs.publish && inputs.deploy_vm && steps.js_peer_bootstrap.outputs.available == 'true' && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
+        if: ${{ inputs.publish && inputs.deploy_vm && steps.deploy_vm.outputs.relay_peer_id != '' && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
         env:
           ALEPH_VM_MODE: site-domain-link
           ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity

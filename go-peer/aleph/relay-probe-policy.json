@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "requiredFamilies": [
+    "tcp",
+    "direct-wss",
+    "proxy-wss",
+    "webtransport"
+  ],
+  "bestEffortFamilies": [
+    "webrtc-direct"
+  ],
+  "proxyWssHostMatchers": [
+    ".2n6.me/"
+  ],
+  "timeoutMs": 20000,
+  "settleMs": 1500
+}
