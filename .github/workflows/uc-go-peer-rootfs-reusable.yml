@@ -2,7 +2,7 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.1.18
+  SHARED_ALEPH_NODE_VERSION: 0.1.52
 
 on:
   workflow_call:
@@ -206,12 +206,12 @@ jobs:
           import json
           from pathlib import Path
 
-          profile = json.loads(Path("go-peer/aleph/root-profiles/uc-go-peer.json").read_text())
+          profile = json.loads(Path("go-peer/aleph/uc-go-peer.json").read_text())
           rootfs = profile["rootfs"]
           services = profile["services"]
           manifest = profile["manifest"]
 
-          print("ROOTFS_CONTRACT_FILE=${{ github.workspace }}/universal-connectivity/go-peer/aleph/root-profiles/uc-go-peer.json")
+          print("ROOTFS_CONTRACT_FILE=${{ github.workspace }}/universal-connectivity/go-peer/aleph/uc-go-peer.json")
           print(f"ROOTFS_PROFILE={rootfs['profile']}")
           print(f"ROOTFS_INSTALL_MODE={rootfs['installMode']}")
           print(f"ROOTFS_INSTALL_DIR={rootfs['installDir']}")
@@ -222,6 +222,24 @@ jobs:
           print(f"ROOTFS_SERVICE_BOOTSTRAP={services['bootstrap']}")
           print(f"ROOTFS_SERVICE_AUTOTLS={services['autotlsRefresh']}")
           print(f"ROOTFS_MANIFEST_COPY_TARGET={manifest['copyTarget']}")
+          PY
+
+      - name: Load relay probe policy
+        working-directory: universal-connectivity
+        run: |
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          from pathlib import Path
+
+          policy = json.loads(Path("go-peer/aleph/relay-probe-policy.json").read_text())
+
+          print("ALEPH_RELAY_PROBE_POLICY_FILE=${{ github.workspace }}/universal-connectivity/go-peer/aleph/relay-probe-policy.json")
+          print(f"ALEPH_RELAY_PROBE_POLICY_VERSION={policy['version']}")
+          print(f"ALEPH_RELAY_PROBE_REQUIRED_FAMILIES_JSON={json.dumps(policy['requiredFamilies'])}")
+          print(f"ALEPH_RELAY_PROBE_BEST_EFFORT_FAMILIES_JSON={json.dumps(policy['bestEffortFamilies'])}")
+          print(f"ALEPH_RELAY_PROBE_PROXY_WSS_HOST_MATCHERS_JSON={json.dumps(policy['proxyWssHostMatchers'])}")
+          print(f"PROBE_TIMEOUT_MS={policy['timeoutMs']}")
+          print(f"PROBE_SETTLE_MS={policy['settleMs']}")
           PY
 
       - name: Derive rootfs version
@@ -263,37 +281,6 @@ jobs:
             squashfs-tools \
             tar
 
-      - name: Install aleph client
-        if: ${{ inputs.publish }}
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install aleph-client
-          python3 -m pip install pycares==4.11.0
-
-      - name: Prepare Aleph account
-        if: ${{ inputs.publish }}
-        run: |
-          mkdir -p "$HOME/.aleph-im/private-keys"
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          private_key = os.environ["ALEPH_PRIVATE_KEY"].strip()
-          if private_key.startswith("0x"):
-              private_key = private_key[2:]
-
-          key_bytes = bytes.fromhex(private_key)
-          config_home = Path.home() / ".aleph-im"
-          key_path = config_home / "private-keys" / "aleph-vm.key"
-          config_path = config_home / "config.json"
-
-          key_path.write_bytes(key_bytes)
-          config_path.write_text(json.dumps({"chain": "ETH", "path": str(key_path)}))
-          print(f"Wrote Aleph key to {key_path}")
-          print(f"Wrote Aleph config to {config_path}")
-          PY
-
       - name: Build uc-go-peer rootfs through shared runner
         id: build_rootfs
         env:
@@ -302,20 +289,18 @@ jobs:
           ALEPH_ROOTFS_CONTRACT_PATH: ${{ env.ROOTFS_CONTRACT_FILE }}
           ALEPH_ROOTFS_VERSION: ${{ env.ROOTFS_VERSION }}
           ALEPH_ROOTFS_SKIP_UPLOAD: ${{ inputs.publish && 'false' || 'true' }}
+          ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_DELAY_SECONDS: '5'
+          ALEPH_ROOTFS_DRIVER: docker
           ALEPH_ROOTFS_HAS_VIRT_CUSTOMIZE: 'true'
-          ALEPH_ROOTFS_HAS_DOCKER: 'false'
+          ALEPH_ROOTFS_HAS_DOCKER: 'true'
+          ALEPH_ROOTFS_DOCKER_DAEMON_RUNNING: 'true'
         run: |
           workdir="$(mktemp -d)"
           cd "$workdir"
           npm init -y >/dev/null 2>&1
           npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
           node --input-type=module -e "import { runRootfsMode } from '@le-space/node'; await runRootfsMode(process.env);"
-
-      - name: Install js-peer publish helpers
-        if: ${{ inputs.publish }}
-        working-directory: universal-connectivity
-        run: |
-          python3 -m pip install requests 'py-cid @ git+https://github.com/ipld/py-cid.git@b13b51774ac3309c3c28a8da6eeab6d1e75dcddc'
 
       - name: Build js-peer site with latest rootfs manifest
         if: ${{ inputs.publish }}
@@ -328,9 +313,14 @@ jobs:
         if: ${{ inputs.publish }}
         id: deploy_site
         env:
+          ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
           ALEPH_VM_MODE: site-publish
           ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
           ALEPH_SITE_DIRECTORY: js-peer/out
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
+          ALEPH_SITE_REF: uc-go-peer-prod
+          ALEPH_SITE_RETENTION_KEEP_COUNT: '10'
         run: |
           workdir="$(mktemp -d)"
           cd "$workdir"
@@ -406,18 +396,16 @@ jobs:
           auto_configure: 'true'
           verify_reachability: 'true'
 
-      - name: Install relay probe dependencies
-        if: ${{ inputs.deploy_vm }}
-        working-directory: universal-connectivity/node-js-peer
-        run: npm ci --no-fund --no-audit
-
       - name: Probe published and browser bootstrap relay multiaddrs
         if: ${{ inputs.deploy_vm }}
         id: protocol_probe
         env:
           ALEPH_VM_MODE: relay-probe
-          ALEPH_SITE_PROBE_WORKDIR: ${{ github.workspace }}/universal-connectivity/node-js-peer
-          ALEPH_SITE_PROBE_SCRIPT: ${{ github.workspace }}/universal-connectivity/node-js-peer/scripts/probe-relay.mjs
+          ALEPH_RELAY_PROBE_REQUIRED_FAMILIES_JSON: ${{ env.ALEPH_RELAY_PROBE_REQUIRED_FAMILIES_JSON }}
+          ALEPH_RELAY_PROBE_BEST_EFFORT_FAMILIES_JSON: ${{ env.ALEPH_RELAY_PROBE_BEST_EFFORT_FAMILIES_JSON }}
+          ALEPH_RELAY_PROBE_PROXY_WSS_HOST_MATCHERS_JSON: ${{ env.ALEPH_RELAY_PROBE_PROXY_WSS_HOST_MATCHERS_JSON }}
+          PROBE_TIMEOUT_MS: ${{ env.PROBE_TIMEOUT_MS }}
+          PROBE_SETTLE_MS: ${{ env.PROBE_SETTLE_MS }}
           PROBE_MULTIADDRS_JSON: ${{ steps.deploy_vm.outputs.probe_multiaddrs_json }}
           BROWSER_BOOTSTRAP_MULTIADDRS_JSON: ${{ steps.deploy_vm.outputs.browser_bootstrap_multiaddrs_json }}
         run: |
@@ -440,21 +428,63 @@ jobs:
           npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
           node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
 
-      - name: Rebuild js-peer site with deployed relay bootstrap addrs
-        if: ${{ inputs.publish && inputs.deploy_vm && steps.js_peer_bootstrap.outputs.available == 'true' }}
-        working-directory: universal-connectivity/js-peer
+      - name: Patch js-peer bootstrap peer id
+        if: ${{ inputs.publish && inputs.deploy_vm && steps.deploy_vm.outputs.relay_peer_id != '' }}
+        working-directory: universal-connectivity
         env:
-          NEXT_PUBLIC_RELAY_LISTEN_ADDRS: ${{ steps.js_peer_bootstrap.outputs.csv }}
+          RELAY_PEER_ID: ${{ steps.deploy_vm.outputs.relay_peer_id }}
+          BROWSER_BOOTSTRAP_MULTIADDRS_JSON: ${{ steps.js_peer_bootstrap.outputs.json }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          relay_peer_id = os.environ["RELAY_PEER_ID"].strip()
+          bootstrap_multiaddrs = json.loads(os.environ.get("BROWSER_BOOTSTRAP_MULTIADDRS_JSON", "[]"))
+          constants_path = Path("js-peer/src/lib/constants.ts")
+          source = constants_path.read_text()
+
+          updated = re.sub(
+              r"(export const WEBTRANSPORT_BOOTSTRAP_PEER_ID = ')[^']+(')",
+              rf"\g<1>{relay_peer_id}\2",
+              source,
+              count=1,
+          )
+
+          updated = re.sub(
+              r"export const BOOTSTRAP_MULTIADDRS: string\[\] = \[[^\]]*\]",
+              f"export const BOOTSTRAP_MULTIADDRS: string[] = {json.dumps(bootstrap_multiaddrs)}",
+              updated,
+              count=1,
+          )
+
+          if updated == source:
+              raise SystemExit("Failed to update js-peer bootstrap constants")
+
+          constants_path.write_text(updated)
+          print(f"Updated {constants_path} to relay peer ID {relay_peer_id} and {len(bootstrap_multiaddrs)} bootstrap multiaddrs")
+          PY
+
+      - name: Rebuild js-peer site with deployed relay bootstrap addrs
+        if: ${{ inputs.publish && inputs.deploy_vm && steps.deploy_vm.outputs.relay_peer_id != '' }}
+        working-directory: universal-connectivity/js-peer
         run: |
           npm run build
 
       - name: Publish republished js-peer site through shared runner
-        if: ${{ inputs.publish && inputs.deploy_vm && steps.js_peer_bootstrap.outputs.available == 'true' }}
+        if: ${{ inputs.publish && inputs.deploy_vm && steps.deploy_vm.outputs.relay_peer_id != '' }}
         id: redeploy_site
         env:
+          ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
           ALEPH_VM_MODE: site-publish
           ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
           ALEPH_SITE_DIRECTORY: js-peer/out
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
+          ALEPH_SITE_REF: uc-go-peer-prod
+          ALEPH_SITE_RETENTION_KEEP_COUNT: '10'
         run: |
           workdir="$(mktemp -d)"
           cd "$workdir"
@@ -463,7 +493,7 @@ jobs:
           node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
 
       - name: Relink production domain through shared runner
-        if: ${{ inputs.publish && inputs.deploy_vm && steps.js_peer_bootstrap.outputs.available == 'true' && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
+        if: ${{ inputs.publish && inputs.deploy_vm && steps.deploy_vm.outputs.relay_peer_id != '' && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
         env:
           ALEPH_VM_MODE: site-domain-link
           ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
@@ -571,6 +601,9 @@ jobs:
         working-directory: universal-connectivity/go-peer/aleph
         env:
           VM_VERIFICATION_JSON: ${{ steps.export_outputs.outputs.vm_verification_json }}
+          VM_BROWSER_BOOTSTRAP_MULTIADDRS_JSON: ${{ steps.export_outputs.outputs.vm_browser_bootstrap_multiaddrs_json }}
+          VM_PROTOCOL_PROBE_JSON: ${{ steps.export_outputs.outputs.vm_protocol_probe_json }}
+          RETENTION_RESULT_JSON: ${{ steps.export_outputs.outputs.retention_result_json }}
         run: |
           {
             echo "## uc-go-peer rootfs build"
@@ -625,28 +658,28 @@ jobs:
               echo '```json'
               printf '%s\n' "${VM_VERIFICATION_JSON}"
               echo '```'
-              if [[ -n "${{ steps.export_outputs.outputs.vm_browser_bootstrap_multiaddrs_json }}" ]]; then
+              if [[ -n "${VM_BROWSER_BOOTSTRAP_MULTIADDRS_JSON}" ]]; then
                 echo
                 echo "#### js-peer Bootstrap Multiaddrs"
                 echo
                 echo '```json'
-                printf '%s\n' "${{ steps.export_outputs.outputs.vm_browser_bootstrap_multiaddrs_json }}"
+                printf '%s\n' "${VM_BROWSER_BOOTSTRAP_MULTIADDRS_JSON}"
                 echo '```'
               fi
-              if [[ -n "${{ steps.export_outputs.outputs.vm_protocol_probe_json }}" ]]; then
+              if [[ -n "${VM_PROTOCOL_PROBE_JSON}" ]]; then
                 echo
                 echo "#### Relay Protocol Probe"
                 echo
                 echo '```json'
-                printf '%s\n' "${{ steps.export_outputs.outputs.vm_protocol_probe_json }}"
+                printf '%s\n' "${VM_PROTOCOL_PROBE_JSON}"
                 echo '```'
               fi
-              if [[ -n "${{ steps.export_outputs.outputs.retention_result_json }}" ]]; then
+              if [[ -n "${RETENTION_RESULT_JSON}" ]]; then
                 echo
                 echo "#### Retention Cleanup"
                 echo
                 echo '```json'
-                printf '%s\n' "${{ steps.export_outputs.outputs.retention_result_json }}"
+                printf '%s\n' "${RETENTION_RESULT_JSON}"
                 echo '```'
               fi
             fi
