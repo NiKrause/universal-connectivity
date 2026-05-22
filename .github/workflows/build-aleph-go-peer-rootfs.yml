@@ -1,6 +1,16 @@
 name: Build uc-go-peer rootfs
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/actions/aleph-vm-deploy/action.yml'
+      - '.github/workflows/build-aleph-go-peer-rootfs.yml'
+      - '.github/workflows/uc-go-peer-rootfs-reusable.yml'
+      - 'go-peer/**'
+      - 'js-peer/**'
+      - 'node-js-peer/**'
   workflow_dispatch:
     inputs:
       publish:
@@ -77,21 +87,21 @@ jobs:
   build-rootfs:
     uses: ./.github/workflows/uc-go-peer-rootfs-reusable.yml
     with:
-      publish: ${{ inputs.publish }}
-      rootfs_version: ${{ inputs.rootfs_version || '' }}
+      publish: ${{ github.event_name == 'push' || inputs.publish }}
+      rootfs_version: ${{ github.event_name == 'workflow_dispatch' && inputs.rootfs_version || '' }}
       aleph_domain: ${{ vars.ALEPH_DOMAIN || '' }}
       aleph_retention_days: ${{ vars.ALEPH_RETENTION_DAYS || '' }}
-      deploy_vm: ${{ inputs.deploy_vm }}
-      vm_name: ${{ inputs.vm_name || 'uc-go-peer' }}
-      vm_ssh_public_key: ${{ inputs.vm_ssh_public_key || '' }}
-      vm_crn_hash: ${{ inputs.vm_crn_hash || vars.ALEPH_VM_CRN_HASH || '' }}
-      vm_vcpus: ${{ inputs.vm_vcpus || '1' }}
-      vm_memory_mib: ${{ inputs.vm_memory_mib || '1024' }}
-      vm_rootfs_size_mib: ${{ inputs.vm_rootfs_size_mib || '20480' }}
-      vm_preferred_country_code: ${{ inputs.vm_preferred_country_code || 'DE' }}
-      vm_geo_crn_limit: ${{ inputs.vm_geo_crn_limit || '30' }}
-      vm_max_crn_attempts: ${{ inputs.vm_max_crn_attempts || '5' }}
-      vm_enable_caddy_proxy: ${{ inputs.vm_enable_caddy_proxy }}
+      deploy_vm: ${{ github.event_name == 'push' || inputs.deploy_vm }}
+      vm_name: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_name || 'uc-go-peer' }}
+      vm_ssh_public_key: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_ssh_public_key || '' }}
+      vm_crn_hash: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_crn_hash || vars.ALEPH_VM_CRN_HASH || '' }}
+      vm_vcpus: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_vcpus || '1' }}
+      vm_memory_mib: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_memory_mib || '1024' }}
+      vm_rootfs_size_mib: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_rootfs_size_mib || '20480' }}
+      vm_preferred_country_code: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_preferred_country_code || 'DE' }}
+      vm_geo_crn_limit: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_geo_crn_limit || '30' }}
+      vm_max_crn_attempts: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_max_crn_attempts || '5' }}
+      vm_enable_caddy_proxy: ${{ github.event_name == 'push' || inputs.vm_enable_caddy_proxy }}
     secrets:
       ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
       VM_SSH_PUBLIC_KEY: ${{ secrets.VM_SSH_PUBLIC_KEY }}
