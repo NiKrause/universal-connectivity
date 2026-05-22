@@ -3,6 +3,7 @@ import {
   DelegatedRoutingV1HttpApiClient,
 } from '@helia/delegated-routing-v1-http-api-client'
 import { createLibp2p } from 'libp2p'
+import { bootstrap } from '@libp2p/bootstrap'
 import { identify } from '@libp2p/identify'
 import { peerIdFromString } from '@libp2p/peer-id'
 import { noise } from '@chainsafe/libp2p-noise'
@@ -33,7 +34,8 @@ export async function startLibp2p(): Promise<Libp2pType> {
   const delegatedClient = createDelegatedRoutingV1HttpApiClient('https://delegated-ipfs.dev')
 
   const relayDialAddrs = await getRelayDialAddrs(delegatedClient)
-  log('starting libp2p with relayDialAddrs: %o', relayDialAddrs)
+  const relayDialAddrStrings = relayDialAddrs.map((addr) => addr.toString())
+  log('starting libp2p with relayDialAddrs: %o', relayDialAddrStrings)
 
   let libp2p: Libp2pType
 
@@ -65,6 +67,11 @@ export async function startLibp2p(): Promise<Libp2pType> {
       faultTolerance: FaultTolerance.NO_FATAL,
     },
     peerDiscovery: [
+      bootstrap({
+        list: relayDialAddrStrings,
+        timeout: 10_000,
+        tagName: 'uc-bootstrap',
+      }),
       pubsubPeerDiscovery({
         interval: 10_000,
         topics: [PUBSUB_PEER_DISCOVERY],
@@ -93,10 +100,6 @@ export async function startLibp2p(): Promise<Libp2pType> {
 
   libp2p.services.pubsub.subscribe(CHAT_TOPIC)
   libp2p.services.pubsub.subscribe(CHAT_FILE_TOPIC)
-
-  // Bootstrap by dialing relay peers directly instead of treating them as
-  // mandatory listen addresses during startup.
-  void dialBootstrapRelayMaddrs(libp2p, relayDialAddrs)
 
   libp2p.addEventListener('self:peer:update', ({ detail: { peer } }) => {
     const multiaddrs = peer.addresses.map(({ multiaddr }) => multiaddr)
@@ -176,18 +179,6 @@ async function getRelayDialAddrs(client: DelegatedRoutingV1HttpApiClient): Promi
     }
   }
   return relayDialAddrs
-}
-
-async function dialBootstrapRelayMaddrs(libp2p: Libp2p, multiaddrs: Multiaddr[]): Promise<void> {
-  for (const addr of multiaddrs) {
-    try {
-      log('attempting to dial relay bootstrap multiaddr: %o', addr)
-      await libp2p.dial(addr)
-      return
-    } catch (error) {
-      log.error('failed to dial relay bootstrap multiaddr: %o', addr)
-    }
-  }
 }
 
 export const getFormattedConnections = (connections: Connection[]) =>
