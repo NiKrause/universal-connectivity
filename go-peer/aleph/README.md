@@ -16,7 +16,7 @@ that process without owning a second full copy of the reusable Aleph tooling.
 
 ## What Lives Here
 
-- [root-profiles/uc-go-peer.json](./root-profiles/uc-go-peer.json)
+- [uc-go-peer.json](./uc-go-peer.json)
   The UC-owned contract for the Aleph guest image:
   profile id, binary path, service names, ports, and manifest metadata.
 - [../../../.github/workflows/build-aleph-go-peer-rootfs.yml](../../../.github/workflows/build-aleph-go-peer-rootfs.yml)
@@ -53,8 +53,18 @@ That Aleph tooling owns:
 This repo mainly defines:
 
 - the UC RootFS contract
+- the UC relay probe policy
 - the UC workflow orchestration
 - the browser bootstrap behavior expected by `js-peer`
+
+## Directory Shape
+
+This directory is intentionally flat so the UC-owned deployment contract is all
+in one place:
+
+- [uc-go-peer.json](./uc-go-peer.json)
+- [relay-probe-policy.json](./relay-probe-policy.json)
+- [README.md](./README.md)
 
 ## How The Aleph Flow Works
 

@@ -206,12 +206,12 @@ jobs:
           import json
           from pathlib import Path
 
-          profile = json.loads(Path("go-peer/aleph/root-profiles/uc-go-peer.json").read_text())
+          profile = json.loads(Path("go-peer/aleph/uc-go-peer.json").read_text())
           rootfs = profile["rootfs"]
           services = profile["services"]
           manifest = profile["manifest"]
 
-          print("ROOTFS_CONTRACT_FILE=${{ github.workspace }}/universal-connectivity/go-peer/aleph/root-profiles/uc-go-peer.json")
+          print("ROOTFS_CONTRACT_FILE=${{ github.workspace }}/universal-connectivity/go-peer/aleph/uc-go-peer.json")
           print(f"ROOTFS_PROFILE={rootfs['profile']}")
           print(f"ROOTFS_INSTALL_MODE={rootfs['installMode']}")
           print(f"ROOTFS_INSTALL_DIR={rootfs['installDir']}")
