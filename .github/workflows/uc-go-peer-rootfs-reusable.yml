@@ -433,13 +433,16 @@ jobs:
         working-directory: universal-connectivity
         env:
           RELAY_PEER_ID: ${{ steps.deploy_vm.outputs.relay_peer_id }}
+          BROWSER_BOOTSTRAP_MULTIADDRS_JSON: ${{ steps.js_peer_bootstrap.outputs.json }}
         run: |
           python3 - <<'PY'
+          import json
           import os
           import re
           from pathlib import Path
 
           relay_peer_id = os.environ["RELAY_PEER_ID"].strip()
+          bootstrap_multiaddrs = json.loads(os.environ.get("BROWSER_BOOTSTRAP_MULTIADDRS_JSON", "[]"))
           constants_path = Path("js-peer/src/lib/constants.ts")
           source = constants_path.read_text()
 
@@ -450,11 +453,18 @@ jobs:
               count=1,
           )
 
+          updated = re.sub(
+              r"export const BOOTSTRAP_MULTIADDRS: string\[\] = \[[^\]]*\]",
+              f"export const BOOTSTRAP_MULTIADDRS: string[] = {json.dumps(bootstrap_multiaddrs)}",
+              updated,
+              count=1,
+          )
+
           if updated == source:
-              raise SystemExit("Failed to update WEBTRANSPORT_BOOTSTRAP_PEER_ID in js-peer/src/lib/constants.ts")
+              raise SystemExit("Failed to update js-peer bootstrap constants")
 
           constants_path.write_text(updated)
-          print(f"Updated {constants_path} to relay peer ID {relay_peer_id}")
+          print(f"Updated {constants_path} to relay peer ID {relay_peer_id} and {len(bootstrap_multiaddrs)} bootstrap multiaddrs")
           PY
 
       - name: Rebuild js-peer site with deployed relay bootstrap addrs
