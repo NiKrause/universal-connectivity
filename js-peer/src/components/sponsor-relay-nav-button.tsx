@@ -15,7 +15,7 @@ export default function SponsorRelayNavButton() {
   return (
     <SponsorRelayFab
       libp2p={libp2p}
-      manifestUrl="https://le-space.de/rootfs-manifest.json"
+      manifestUrl="https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json"
       showInstances={true}
       instanceName="uc-relay"
       launcherMode="inline"
