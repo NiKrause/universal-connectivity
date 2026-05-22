@@ -548,6 +548,9 @@ jobs:
         working-directory: universal-connectivity/go-peer/aleph
         env:
           VM_VERIFICATION_JSON: ${{ steps.export_outputs.outputs.vm_verification_json }}
+          VM_BROWSER_BOOTSTRAP_MULTIADDRS_JSON: ${{ steps.export_outputs.outputs.vm_browser_bootstrap_multiaddrs_json }}
+          VM_PROTOCOL_PROBE_JSON: ${{ steps.export_outputs.outputs.vm_protocol_probe_json }}
+          RETENTION_RESULT_JSON: ${{ steps.export_outputs.outputs.retention_result_json }}
         run: |
           {
             echo "## uc-go-peer rootfs build"
@@ -602,28 +605,28 @@ jobs:
               echo '```json'
               printf '%s\n' "${VM_VERIFICATION_JSON}"
               echo '```'
-              if [[ -n "${{ steps.export_outputs.outputs.vm_browser_bootstrap_multiaddrs_json }}" ]]; then
+              if [[ -n "${VM_BROWSER_BOOTSTRAP_MULTIADDRS_JSON}" ]]; then
                 echo
                 echo "#### js-peer Bootstrap Multiaddrs"
                 echo
                 echo '```json'
-                printf '%s\n' "${{ steps.export_outputs.outputs.vm_browser_bootstrap_multiaddrs_json }}"
+                printf '%s\n' "${VM_BROWSER_BOOTSTRAP_MULTIADDRS_JSON}"
                 echo '```'
               fi
-              if [[ -n "${{ steps.export_outputs.outputs.vm_protocol_probe_json }}" ]]; then
+              if [[ -n "${VM_PROTOCOL_PROBE_JSON}" ]]; then
                 echo
                 echo "#### Relay Protocol Probe"
                 echo
                 echo '```json'
-                printf '%s\n' "${{ steps.export_outputs.outputs.vm_protocol_probe_json }}"
+                printf '%s\n' "${VM_PROTOCOL_PROBE_JSON}"
                 echo '```'
               fi
-              if [[ -n "${{ steps.export_outputs.outputs.retention_result_json }}" ]]; then
+              if [[ -n "${RETENTION_RESULT_JSON}" ]]; then
                 echo
                 echo "#### Retention Cleanup"
                 echo
                 echo '```json'
-                printf '%s\n' "${{ steps.export_outputs.outputs.retention_result_json }}"
+                printf '%s\n' "${RETENTION_RESULT_JSON}"
                 echo '```'
               fi
             fi
