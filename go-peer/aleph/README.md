@@ -153,15 +153,16 @@ In short:
 
 After guest configuration, the workflow probes the returned relay multiaddrs.
 
-The ownership split for that probe should be:
+The ownership split for that probe is:
 
-- shared-aleph-tooling owns the probe runner implementation
+- shared-aleph-tooling owns the probe runner implementation in
+  `packages/node/src/relay-probe.ts`
 - `universal-connectivity` owns the policy contract in
   `go-peer/aleph/relay-probe-policy.json`
 - `.github/workflows/uc-go-peer-rootfs-reusable.yml` loads that file and passes
   the resolved values into the probe runner through environment variables
 
-Today the UC policy contract is:
+The UC policy contract is:
 
 - file:
   - `go-peer/aleph/relay-probe-policy.json`

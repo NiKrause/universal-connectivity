@@ -2,7 +2,7 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.1.51
+  SHARED_ALEPH_NODE_VERSION: 0.1.52
 
 on:
   workflow_call:
@@ -396,18 +396,11 @@ jobs:
           auto_configure: 'true'
           verify_reachability: 'true'
 
-      - name: Install relay probe dependencies
-        if: ${{ inputs.deploy_vm }}
-        working-directory: universal-connectivity/node-js-peer
-        run: npm ci --no-fund --no-audit
-
       - name: Probe published and browser bootstrap relay multiaddrs
         if: ${{ inputs.deploy_vm }}
         id: protocol_probe
         env:
           ALEPH_VM_MODE: relay-probe
-          ALEPH_SITE_PROBE_WORKDIR: ${{ github.workspace }}/universal-connectivity/node-js-peer
-          ALEPH_SITE_PROBE_SCRIPT: ${{ github.workspace }}/universal-connectivity/node-js-peer/scripts/probe-relay.mjs
           ALEPH_RELAY_PROBE_REQUIRED_FAMILIES_JSON: ${{ env.ALEPH_RELAY_PROBE_REQUIRED_FAMILIES_JSON }}
           ALEPH_RELAY_PROBE_BEST_EFFORT_FAMILIES_JSON: ${{ env.ALEPH_RELAY_PROBE_BEST_EFFORT_FAMILIES_JSON }}
           ALEPH_RELAY_PROBE_PROXY_WSS_HOST_MATCHERS_JSON: ${{ env.ALEPH_RELAY_PROBE_PROXY_WSS_HOST_MATCHERS_JSON }}
