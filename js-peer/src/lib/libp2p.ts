@@ -9,6 +9,7 @@ import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
 import { Multiaddr } from '@multiformats/multiaddr'
 import { sha256 } from 'multiformats/hashes/sha2'
+import { FaultTolerance } from '@libp2p/interface'
 import type { Connection, Message, SignedMessage, PeerId, Libp2p } from '@libp2p/interface'
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { webSockets } from '@libp2p/websockets'
@@ -57,6 +58,12 @@ export async function startLibp2p(): Promise<Libp2pType> {
     streamMuxers: [yamux()],
     connectionGater: {
       denyDialMultiaddr: async () => false,
+    },
+    // Some deployed relays may advertise browser-dialable addresses that still
+    // fail relay reservation from the browser. Allow startup to continue in
+    // dial-only mode instead of failing the whole app.
+    transportManager: {
+      faultTolerance: FaultTolerance.NO_FATAL,
     },
     peerDiscovery: [
       pubsubPeerDiscovery({
