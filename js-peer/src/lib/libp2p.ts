@@ -11,7 +11,7 @@ import { yamux } from '@chainsafe/libp2p-yamux'
 import { Multiaddr } from '@multiformats/multiaddr'
 import { sha256 } from 'multiformats/hashes/sha2'
 import { FaultTolerance } from '@libp2p/interface'
-import type { Connection, Message, SignedMessage, Libp2p } from '@libp2p/interface'
+import type { Connection, Message, SignedMessage, PeerId, Libp2p } from '@libp2p/interface'
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { webSockets } from '@libp2p/websockets'
 import { webTransport } from '@libp2p/webtransport'
@@ -173,13 +173,16 @@ async function getRelayDialAddrs(client: DelegatedRoutingV1HttpApiClient): Promi
         // Narrow to secure websocket addresses that browsers can dial.
         if (protos.includes('tls') && protos.includes('ws')) {
           if (maddr.nodeAddress().address === '127.0.0.1') continue // skip loopback
-          relayDialAddrs.push(maddr)
+          relayDialAddrs.push(getRelayDialAddr(maddr, p.ID))
         }
       }
     }
   }
   return relayDialAddrs
 }
+
+const getRelayDialAddr = (maddr: Multiaddr, peer: PeerId): Multiaddr =>
+  maddr.encapsulate(`/p2p/${peer.toString()}`)
 
 export const getFormattedConnections = (connections: Connection[]) =>
   connections.map((conn) => ({
