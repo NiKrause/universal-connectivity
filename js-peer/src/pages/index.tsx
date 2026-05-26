@@ -24,7 +24,7 @@ export default function Chat() {
       <main className="min-h-full flex flex-col">
         <Nav
           connectionInfoButton={
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <ConnectionInfoButton onClick={handleOpenConnectionPanel} />
               <SponsorRelayNavButton />
             </div>
