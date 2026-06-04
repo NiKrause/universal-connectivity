@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
+      NEXT_PUBLIC_VM_SSH_PUBLIC_KEY: ${{ vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY != '' && vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
     defaults:
       run:
         working-directory: js-peer

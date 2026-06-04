@@ -304,6 +304,8 @@ jobs:
 
       - name: Build js-peer site with latest rootfs manifest
         if: ${{ inputs.publish }}
+        env:
+          NEXT_PUBLIC_VM_SSH_PUBLIC_KEY: ${{ vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY != '' && vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
         working-directory: universal-connectivity/js-peer
         run: |
           npm ci
@@ -569,6 +571,24 @@ jobs:
               echo "- Versioned manifest URL: ${{ steps.export_outputs.outputs.manifest_versioned_url }}"
             else
               echo "- Versioned manifest workspace path: \`js-peer/public/rootfs/uc-go-peer/${ROOTFS_VERSION}.json\`"
+            fi
+            if [[ "${{ inputs.deploy_vm }}" != "true" ]]; then
+              echo
+              echo "### VM Deployment"
+              echo
+              echo "- VM deployment: skipped"
+              echo "- Reason: this run was started with \`deploy_vm=false\`"
+              if [[ "${{ inputs.publish }}" == "true" ]]; then
+                echo "- Production domain owner: \`build-aleph-go-peer-rootfs.yml\`"
+                if [[ -n "${{ steps.export_outputs.outputs.manifest_latest_url }}" ]]; then
+                  echo "- Expected latest manifest URL after relink: ${{ steps.export_outputs.outputs.manifest_latest_url }}"
+                fi
+              fi
+              echo
+              echo "### Retention Cleanup"
+              echo
+              echo "- Retention cleanup: skipped"
+              echo "- Reason: retention only runs after a successful publish + VM deployment"
             fi
             if [[ -n "${{ steps.export_outputs.outputs.vm_instance_item_hash }}" ]]; then
               echo
