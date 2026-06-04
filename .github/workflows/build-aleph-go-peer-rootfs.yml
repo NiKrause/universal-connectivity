@@ -91,7 +91,7 @@ jobs:
       rootfs_version: ${{ github.event_name == 'workflow_dispatch' && inputs.rootfs_version || '' }}
       aleph_domain: ${{ vars.ALEPH_DOMAIN || '' }}
       aleph_retention_days: ${{ vars.ALEPH_RETENTION_DAYS || '' }}
-      deploy_vm: ${{ github.event_name == 'push' || inputs.deploy_vm }}
+      deploy_vm: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_vm || false }}
       vm_name: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_name || 'uc-go-peer' }}
       vm_ssh_public_key: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_ssh_public_key || '' }}
       vm_crn_hash: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_crn_hash || vars.ALEPH_VM_CRN_HASH || '' }}
