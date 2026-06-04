@@ -2,7 +2,7 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.3.0
+  SHARED_ALEPH_NODE_VERSION: 0.3.2
 
 on:
   workflow_call:
@@ -530,6 +530,13 @@ jobs:
         run: |
           {
             echo "## uc-go-peer rootfs build"
+            if [[ -n "${{ steps.export_outputs.outputs.site_url }}" ]]; then
+              echo
+              echo "### Published Site"
+              echo
+              echo "Final js-peer site URL:"
+              echo "${{ steps.export_outputs.outputs.site_url }}"
+            fi
             echo
             echo "- Builder path: \`@le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }} -> runRootfsMode(...), runSiteMode(...)\`"
             echo "- Shared tooling source: \`npm:@le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}\`"
@@ -551,7 +558,7 @@ jobs:
               echo "- Rootfs Aleph item hash: \`${{ steps.export_outputs.outputs.rootfs_item_hash }}\`"
             fi
             if [[ -n "${{ steps.export_outputs.outputs.site_url }}" ]]; then
-              echo "- js-peer site URL: ${{ steps.export_outputs.outputs.site_url }}"
+              echo "- Published site URL: ${{ steps.export_outputs.outputs.site_url }}"
             fi
             if [[ -n "${{ steps.export_outputs.outputs.manifest_latest_url }}" ]]; then
               echo "- Latest manifest URL: ${{ steps.export_outputs.outputs.manifest_latest_url }}"
