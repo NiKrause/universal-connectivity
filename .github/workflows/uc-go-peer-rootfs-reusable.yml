@@ -2,7 +2,7 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.1.52
+  SHARED_ALEPH_NODE_VERSION: 0.3.0
 
 on:
   workflow_call:
@@ -415,93 +415,16 @@ jobs:
           npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
           node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
 
-      - name: Prepare js-peer relay bootstrap env
-        if: ${{ inputs.publish && inputs.deploy_vm }}
-        id: js_peer_bootstrap
-        env:
-          ALEPH_VM_MODE: bootstrap-env
-          BROWSER_BOOTSTRAP_MULTIADDRS_JSON: ${{ steps.deploy_vm.outputs.browser_bootstrap_multiaddrs_json }}
-        run: |
-          workdir="$(mktemp -d)"
-          cd "$workdir"
-          npm init -y >/dev/null 2>&1
-          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
-          node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
-
-      - name: Patch js-peer bootstrap peer id
-        if: ${{ inputs.publish && inputs.deploy_vm && steps.deploy_vm.outputs.relay_peer_id != '' }}
-        working-directory: universal-connectivity
-        env:
-          RELAY_PEER_ID: ${{ steps.deploy_vm.outputs.relay_peer_id }}
-          BROWSER_BOOTSTRAP_MULTIADDRS_JSON: ${{ steps.js_peer_bootstrap.outputs.json }}
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import re
-          from pathlib import Path
-
-          relay_peer_id = os.environ["RELAY_PEER_ID"].strip()
-          bootstrap_multiaddrs = json.loads(os.environ.get("BROWSER_BOOTSTRAP_MULTIADDRS_JSON", "[]"))
-          constants_path = Path("js-peer/src/lib/constants.ts")
-          source = constants_path.read_text()
-
-          updated = re.sub(
-              r"(export const WEBTRANSPORT_BOOTSTRAP_PEER_ID = ')[^']+(')",
-              rf"\g<1>{relay_peer_id}\2",
-              source,
-              count=1,
-          )
-
-          updated = re.sub(
-              r"export const BOOTSTRAP_MULTIADDRS: string\[\] = \[[^\]]*\]",
-              f"export const BOOTSTRAP_MULTIADDRS: string[] = {json.dumps(bootstrap_multiaddrs)}",
-              updated,
-              count=1,
-          )
-
-          if updated == source:
-              raise SystemExit("Failed to update js-peer bootstrap constants")
-
-          constants_path.write_text(updated)
-          print(f"Updated {constants_path} to relay peer ID {relay_peer_id} and {len(bootstrap_multiaddrs)} bootstrap multiaddrs")
-          PY
-
-      - name: Rebuild js-peer site with deployed relay bootstrap addrs
-        if: ${{ inputs.publish && inputs.deploy_vm && steps.deploy_vm.outputs.relay_peer_id != '' }}
-        working-directory: universal-connectivity/js-peer
-        run: |
-          npm run build
-
-      - name: Publish republished js-peer site through shared runner
-        if: ${{ inputs.publish && inputs.deploy_vm && steps.deploy_vm.outputs.relay_peer_id != '' }}
-        id: redeploy_site
-        env:
-          ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
-          ALEPH_VM_MODE: site-publish
-          ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
-          ALEPH_SITE_DIRECTORY: js-peer/out
-          ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
-          ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
-          ALEPH_SITE_REF: uc-go-peer-prod
-          ALEPH_SITE_RETENTION_KEEP_COUNT: '10'
-        run: |
-          workdir="$(mktemp -d)"
-          cd "$workdir"
-          npm init -y >/dev/null 2>&1
-          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
-          node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
-
       - name: Relink production domain through shared runner
-        if: ${{ inputs.publish && inputs.deploy_vm && steps.deploy_vm.outputs.relay_peer_id != '' && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
+        if: ${{ inputs.publish && inputs.deploy_vm && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
         env:
           ALEPH_VM_MODE: site-domain-link
           ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
           ALEPH_SITE_DOMAIN: ${{ inputs.aleph_domain }}
-          ALEPH_SITE_ITEM_HASH: ${{ steps.redeploy_site.outputs.item_hash }}
+          ALEPH_SITE_ITEM_HASH: ${{ steps.deploy_site.outputs.item_hash }}
         run: |
-          if [[ -z "${{ steps.redeploy_site.outputs.item_hash }}" ]]; then
-            echo "redeploy_site.outputs.item_hash is missing after js-peer republish"
+          if [[ -z "${{ steps.deploy_site.outputs.item_hash }}" ]]; then
+            echo "deploy_site.outputs.item_hash is missing after js-peer publish"
             exit 1
           fi
           workdir="$(mktemp -d)"
@@ -519,9 +442,9 @@ jobs:
           ALEPH_VM_API_HOST: https://api2.aleph.im
           ALEPH_VM_CHANNEL: TEST
           ALEPH_VM_RETENTION_KEEP_COUNT: ${{ inputs.retain_successful_deployments }}
-          ALEPH_VM_RETENTION_EXTRA_FORGET_HASHES_JSON: ${{ steps.redeploy_site.outputs.item_hash != '' && format('["{0}"]', steps.deploy_site.outputs.item_hash) || '[]' }}
+          ALEPH_VM_RETENTION_EXTRA_FORGET_HASHES_JSON: '[]'
           ALEPH_VM_RETENTION_CURRENT_RECORD_JSON: >-
-            {"instance_item_hash":"${{ steps.deploy_vm.outputs.instance_item_hash }}","rootfs_item_hash":"${{ steps.collect_rootfs_outputs.outputs.rootfs_item_hash }}","rootfs_cid":"${{ steps.collect_rootfs_outputs.outputs.rootfs_cid }}","site_item_hash":"${{ steps.redeploy_site.outputs.item_hash != '' && steps.redeploy_site.outputs.item_hash || steps.deploy_site.outputs.item_hash }}","site_url":"${{ steps.redeploy_site.outputs.url != '' && steps.redeploy_site.outputs.url || steps.deploy_site.outputs.url }}","relay_peer_id":"${{ steps.deploy_vm.outputs.relay_peer_id }}","rootfs_version":"${{ env.ROOTFS_VERSION }}","vm_name":"${{ inputs.vm_name }}","deployed_at":"${{ github.run_id }}-${{ github.run_attempt }}"}
+            {"instance_item_hash":"${{ steps.deploy_vm.outputs.instance_item_hash }}","rootfs_item_hash":"${{ steps.collect_rootfs_outputs.outputs.rootfs_item_hash }}","rootfs_cid":"${{ steps.collect_rootfs_outputs.outputs.rootfs_cid }}","site_item_hash":"${{ steps.deploy_site.outputs.item_hash }}","site_url":"${{ steps.deploy_site.outputs.url }}","relay_peer_id":"${{ steps.deploy_vm.outputs.relay_peer_id }}","rootfs_version":"${{ env.ROOTFS_VERSION }}","vm_name":"${{ inputs.vm_name }}","deployed_at":"${{ github.run_id }}-${{ github.run_attempt }}"}
         run: |
           set -euo pipefail
           workdir="$(mktemp -d)"
@@ -534,7 +457,7 @@ jobs:
         if: ${{ always() }}
         id: export_outputs
         run: |
-          final_site_url='${{ steps.redeploy_site.outputs.url != '' && steps.redeploy_site.outputs.url || steps.deploy_site.outputs.url }}'
+          final_site_url="${initial_site_url}"
           final_manifest_latest_url="${initial_manifest_latest_url}"
           final_manifest_versioned_url="${initial_manifest_versioned_url}"
 
@@ -653,7 +576,6 @@ jobs:
               echo "- VM SSH command: \`${{ steps.export_outputs.outputs.vm_ssh_command }}\`"
               echo "- VM verification ok: \`${{ steps.export_outputs.outputs.vm_verification_ok }}\`"
               echo "- VM protocol probe ok: \`${{ steps.export_outputs.outputs.vm_protocol_probe_ok }}\`"
-              echo "- Browser bootstrap multiaddrs available: \`${{ steps.js_peer_bootstrap.outputs.available || 'false' }}\`"
               echo
               echo '```json'
               printf '%s\n' "${VM_VERIFICATION_JSON}"

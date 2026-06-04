@@ -8,8 +8,8 @@ At a high level, the Aleph workflow does four things:
 1. build a RootFS image for the UC Go relay
 2. publish that image to IPFS and pin it through Aleph
 3. create an Aleph VM instance from that published RootFS
-4. publish or republish `js-peer` with the correct bootstrap addresses for the
-   deployed relay
+4. publish `js-peer` and publish the deployed relay bootstrap registration for
+   runtime discovery
 
 This directory exists so UC maintainers can define the UC-specific contract for
 that process without owning a second full copy of the reusable Aleph tooling.
@@ -20,8 +20,8 @@ that process without owning a second full copy of the reusable Aleph tooling.
   The UC-owned contract for the Aleph guest image:
   profile id, binary path, service names, ports, and manifest metadata.
 - [../../../.github/workflows/build-aleph-go-peer-rootfs.yml](../../../.github/workflows/build-aleph-go-peer-rootfs.yml)
-  Manual workflow entrypoint for build, publish, deploy, probe, republish, and
-  retention.
+  Manual workflow entrypoint for build, publish, deploy, probe, registry
+  publication, and retention.
 - [../../../.github/workflows/uc-go-peer-rootfs-reusable.yml](../../../.github/workflows/uc-go-peer-rootfs-reusable.yml)
   The UC workflow that coordinates the whole Aleph lifecycle.
 - [../../../.github/actions/aleph-vm-deploy/action.yml](../../../.github/actions/aleph-vm-deploy/action.yml)
@@ -47,7 +47,7 @@ That Aleph tooling owns:
 - AutoTLS refresh behavior
 - Aleph publish and pin helpers
 - VM deployment logic
-- site publish, probe, bootstrap, and domain-link helpers
+- site publish, relay-bootstrap registration, probe, and domain-link helpers
 - deployment retention cleanup
 
 This repo mainly defines:
@@ -76,39 +76,40 @@ The normal manual workflow path is:
    scripts
 4. publish the qcow2 image to IPFS
 5. pin the image on Aleph and wait for the Aleph `STORE` message
-6. optionally deploy an Aleph VM from that published image
-7. configure the guest and collect the final relay multiaddrs
-8. publish `js-peer` once, or republish it with final bootstrap addresses after
-   deployment
+6. publish `js-peer` once
+7. optionally deploy an Aleph VM from that published image
+8. configure the guest, collect the final relay multiaddrs, and publish the
+   relay bootstrap registration to Aleph for runtime discovery
 9. optionally prune older successful deployments from Aleph
 
-## Why There Is A Two-Pass `js-peer` Publish
+## Runtime Bootstrap Discovery
 
-When a VM is deployed, the final browser bootstrap addresses are not fully
-known before the guest starts.
+`js-peer` now discovers relay bootstrap multiaddrs at runtime through the
+shared Aleph bootstrap registry instead of relying on workflow-baked constants.
 
-That is why the workflow can publish `js-peer` twice:
+That means the workflow no longer needs to rebuild or republish `js-peer` after
+deployment. The publish path is:
 
-1. initial publish so there is already a site and manifest
+1. publish the `js-peer` site and manifest once
 2. deploy VM and inspect the real relay addresses
-3. republish `js-peer` with the final browser bootstrap addresses
+3. publish the relay bootstrap registration to Aleph
+4. let `js-peer` discover fresh bootstrap multiaddrs at startup
 
-This is especially important for Aleph because the externally reachable relay
-ports are assigned by the VM runtime and are not known ahead of time.
+This is still important for Aleph because the externally reachable relay ports
+are assigned by the VM runtime and are not known ahead of time. The difference
+is that the dynamic registry absorbs that late-bound runtime information rather
+than forcing a second site publish.
 
 In the current production path on `main`, that means:
 
-1. publish an initial `js-peer` site and manifest
-2. link the configured production domain to that initial site when
-   `ALEPH_DOMAIN` is set
+1. publish `js-peer` once
+2. link the configured production domain to that site when `ALEPH_DOMAIN` is
+   set
 3. deploy and inspect the VM
-4. rebuild and republish `js-peer` with the final browser bootstrap addresses
-5. relink the production domain to the final republished site
+4. publish the relay bootstrap registration to Aleph
 
-When the second publish happens, retention cleanup can also forget the
-superseded initial site `STORE` message from the same run, so the final site
-artifact is the one that remains referenced by the domain and the successful
-deployment aggregate.
+Retention cleanup now only needs to track the single published site artifact
+for the successful deployment aggregate.
 ## AutoTLS, Direct WSS, And Proxy WSS
 
 There are two browser-relevant secure websocket paths:
@@ -198,8 +199,8 @@ The current policy is:
 Operationally, `webrtc-direct` was more fragile than the required transports.
 The workflow still records `webrtc-direct` warnings in probe output for
 debugging, but a `webrtc-direct` parsing or ping failure does not block the
-publish, republish, domain-link, or retention path as long as the required
-transports succeeded.
+publish, registry-publication, domain-link, or retention path as long as the
+required transports succeeded.
 
 The current concrete values in `relay-probe-policy.json` are:
 
