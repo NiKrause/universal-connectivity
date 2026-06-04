@@ -1,4 +1,5 @@
 import dynamic from 'next/dynamic'
+import React from 'react'
 
 import { useLibp2pContext } from '@/context/ctx'
 
@@ -10,12 +11,32 @@ export default function SponsorRelayNavButton() {
   const { libp2p } = useLibp2pContext()
 
   return (
-    <SponsorRelayFab
-      libp2p={libp2p}
-      manifestUrl="https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json"
-      showInstances={true}
-      instanceName="uc-relay"
-      launcherMode="inline"
-    />
+    <div
+      style={
+        {
+          '--le-space-sponsor-relay-launcher-start': '#4f46e5',
+          '--le-space-sponsor-relay-launcher-end': '#6366f1',
+          '--le-space-sponsor-relay-launcher-border': 'rgba(199, 210, 254, 0.42)',
+          '--le-space-sponsor-relay-launcher-badge-bg': 'rgba(49, 46, 129, 0.92)',
+          '--le-space-sponsor-relay-launcher-badge-border': 'rgba(191, 219, 254, 0.24)',
+          '--le-space-sponsor-relay-launcher-dot': '#f59e0b',
+          '--le-space-sponsor-relay-launcher-dot-ring': 'rgba(245, 158, 11, 0.18)',
+          '--le-space-sponsor-relay-launcher-shadow': '0 10px 24px rgba(99, 102, 241, 0.22)',
+          '--le-space-sponsor-relay-launcher-hover-shadow': '0 14px 30px rgba(79, 70, 229, 0.28)',
+          '--le-space-sponsor-relay-panel-bg': 'rgba(49, 46, 129, 0.94)',
+          '--le-space-sponsor-relay-panel-border': 'rgba(199, 210, 254, 0.22)',
+          '--le-space-sponsor-relay-panel-shadow': '0 28px 80px rgba(49, 46, 129, 0.34)',
+          '--le-space-sponsor-relay-backdrop-accent': 'rgba(79, 70, 229, 0.2)',
+        } as React.CSSProperties
+      }
+    >
+      <SponsorRelayFab
+        libp2p={libp2p}
+        manifestUrl="https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json"
+        showInstances={true}
+        instanceName="uc-relay"
+        launcherMode="inline"
+      />
+    </div>
   )
 }

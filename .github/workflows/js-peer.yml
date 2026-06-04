@@ -35,20 +35,6 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
-      - name: Debug Aleph inputs
-        run: |
-          if [[ -n "$ALEPH_PRIVATE_KEY" ]]; then
-            echo "ALEPH_PRIVATE_KEY is set"
-          else
-            echo "ALEPH_PRIVATE_KEY is missing"
-          fi
-          if [[ -n "${{ vars.ALEPH_DOMAIN }}" ]]; then
-            echo "ALEPH_DOMAIN=${{ vars.ALEPH_DOMAIN }}"
-          else
-            echo "ALEPH_DOMAIN is missing"
-          fi
-          echo "github.event_name=${{ github.event_name }}"
-          echo "github.ref=${{ github.ref }}"
       - name: Deploy preview on Aleph for PRs
         id: deploy
         if: github.event_name == 'pull_request'
@@ -82,29 +68,12 @@ jobs:
               echo '- Preview deployment finished, but no URL/CID output was exposed by the action.'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Deploy production on Aleph
-        id: deploy_prod
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.ALEPH_PRIVATE_KEY != ''
-        uses: aleph-im/web3-hosting-action@v1.1.4
-        with:
-          path: js-peer/out
-          private-key: ${{ env.ALEPH_PRIVATE_KEY }}
-          retention_days: ${{ vars.ALEPH_RETENTION_DAYS }}
-      - name: Install Aleph client for domain link
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.ALEPH_PRIVATE_KEY != '' && vars.ALEPH_DOMAIN != ''
-        working-directory: .
+      - name: Summarize production ownership
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install aleph-client pycares==4.11.0
-      - name: Link production domain on Aleph as IPFS
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.ALEPH_PRIVATE_KEY != '' && vars.ALEPH_DOMAIN != ''
-        working-directory: .
-        run: |
-          if [[ -z "${ITEM_HASH:-}" ]]; then
-            echo "ITEM_HASH is missing after Aleph deployment"
-            exit 1
-          fi
-          mkdir -p /home/runner/.aleph-im/private-keys
-          echo "$ALEPH_PRIVATE_KEY" | xxd -r -p > /home/runner/.aleph-im/private-keys/ethereum.key
-          aleph domain detach "${{ vars.ALEPH_DOMAIN }}" --no-ask || true
-          aleph domain attach "${{ vars.ALEPH_DOMAIN }}" --item-hash "$ITEM_HASH" --catch-all-path /index.html --no-ask
+          {
+            echo '## Production Publish Ownership'
+            echo
+            echo '- The custom domain is intentionally managed by `build-aleph-go-peer-rootfs.yml`.'
+            echo '- This `js-peer` workflow only verifies the browser app build on `main` so it does not overwrite `/rootfs/uc-go-peer/latest.json`.'
+          } >> "$GITHUB_STEP_SUMMARY"
