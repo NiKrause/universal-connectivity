@@ -4,6 +4,7 @@ import { bootstrap } from '@libp2p/bootstrap'
 import { identify } from '@libp2p/identify'
 import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
+import { discoverAlephBootstrapMultiaddrs } from '@le-space/aleph-bootstrap'
 import { Multiaddr } from '@multiformats/multiaddr'
 import { sha256 } from 'multiformats/hashes/sha2'
 import { FaultTolerance } from '@libp2p/interface'
@@ -11,7 +12,6 @@ import type { Connection, Message, SignedMessage, Libp2p } from '@libp2p/interfa
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { webSockets } from '@libp2p/websockets'
 import { webTransport } from '@libp2p/webtransport'
-import { webRTC, webRTCDirect } from '@libp2p/webrtc'
 import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
 import { pubsubPeerDiscovery } from '@libp2p/pubsub-peer-discovery'
 import { ping } from '@libp2p/ping'
@@ -25,9 +25,14 @@ const log = forComponent('libp2p')
 export async function startLibp2p(): Promise<Libp2pType> {
   // enable verbose logging in browser console to view debug logs
   enable('ui*,libp2p*,-libp2p:connection-manager*,-*:trace')
+  const { webRTC, webRTCDirect } = await import('@libp2p/webrtc')
 
   const delegatedClient = createDelegatedRoutingV1HttpApiClient('https://delegated-ipfs.dev')
-  const relayDialAddrStrings = BOOTSTRAP_MULTIADDRS
+  const discoveredBootstrapMultiaddrs = await discoverAlephBootstrapMultiaddrs().catch((error) => {
+    log.error('failed to load Aleph bootstrap multiaddrs: %o', error)
+    return []
+  })
+  const relayDialAddrStrings = [...new Set([...BOOTSTRAP_MULTIADDRS, ...discoveredBootstrapMultiaddrs])]
   log('starting libp2p with relayDialAddrs: %o', relayDialAddrStrings)
 
   let libp2p: Libp2pType
@@ -82,7 +87,7 @@ export async function startLibp2p(): Promise<Libp2pType> {
         ignoreDuplicatePublishError: true,
       }),
       // Keep delegated routing enabled for peer/content routing even though
-      // bootstrap now uses workflow-baked multiaddrs.
+      // bootstrap now prefers the dynamic Aleph bootstrap registry.
       delegatedRouting: () => delegatedClient,
       identify: identify(),
       // Custom protocol for direct messaging
