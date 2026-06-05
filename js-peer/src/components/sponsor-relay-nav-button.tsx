@@ -9,6 +9,12 @@ const SponsorRelayFab = dynamic(() => import('@le-space/ui/react').then((mod) =>
 
 export default function SponsorRelayNavButton() {
   const { libp2p } = useLibp2pContext()
+  const configuredAlephDomain = process.env.NEXT_PUBLIC_ALEPH_DOMAIN?.trim()
+  const manifestUrl = configuredAlephDomain
+    ? `https://${configuredAlephDomain}/rootfs/uc-go-peer/latest.json`
+    : typeof window !== 'undefined'
+      ? new URL('/rootfs/uc-go-peer/latest.json', window.location.origin).toString()
+      : '/rootfs/uc-go-peer/latest.json'
 
   return (
     <div
@@ -32,7 +38,7 @@ export default function SponsorRelayNavButton() {
     >
       <SponsorRelayFab
         libp2p={libp2p}
-        manifestUrl="https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json"
+        manifestUrl={manifestUrl}
         sshPublicKey={process.env.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY ?? ''}
         showInstances={true}
         instanceName="uc-relay"

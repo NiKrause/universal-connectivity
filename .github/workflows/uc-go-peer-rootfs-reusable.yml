@@ -305,6 +305,7 @@ jobs:
       - name: Build js-peer site with latest rootfs manifest
         if: ${{ inputs.publish }}
         env:
+          NEXT_PUBLIC_ALEPH_DOMAIN: ${{ vars.NEXT_PUBLIC_ALEPH_DOMAIN != '' && vars.NEXT_PUBLIC_ALEPH_DOMAIN || inputs.aleph_domain }}
           NEXT_PUBLIC_VM_SSH_PUBLIC_KEY: ${{ vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY != '' && vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
         working-directory: universal-connectivity/js-peer
         run: |
