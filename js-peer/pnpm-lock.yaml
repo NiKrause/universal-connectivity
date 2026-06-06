@@ -26,11 +26,11 @@ importers:
         specifier: ^2.1.3
         version: 2.2.0(react@18.3.1)
       '@le-space/aleph-bootstrap':
-        specifier: ^0.3.3
-        version: 0.3.3(typescript@5.4.5)
+        specifier: ^0.3.12
+        version: 0.3.12(typescript@5.4.5)
       '@le-space/ui':
-        specifier: ^0.3.7
-        version: 0.3.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(svelte@5.55.10)(typescript@5.4.5)
+        specifier: ^0.3.12
+        version: 0.3.12(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(svelte@5.55.10)(typescript@5.4.5)
       '@libp2p/bootstrap':
         specifier: ^11.0.28
         version: 11.0.47
@@ -440,29 +440,25 @@ packages:
       { integrity: sha512-TuB0x50EoAvEX/UEWITd8Mkn3WhiTjSvbTMCLj0BhsQEl5iUzjXdA0bETEVpTk+5TGTLR6QktI9H4hLviVeaAQ== }
     engines: { node: '>=v12.0.0' }
 
-  '@le-space/aleph-bootstrap@0.3.3':
+  '@le-space/aleph-bootstrap@0.3.12':
     resolution:
-      { integrity: sha512-cKw2i23Z/jpYfGHEBl1iScVXG73I0mYepqeVEUH7Hgd+sAQMRn+cPuYT3kXEhXHVla+H8ajGUttyBNHD5NWkfg== }
+      { integrity: sha512-YrbBRMf0fCwBj1NWay6MvwPvjRJ/FSlxrzdl8tekFXfM+XV6Zqfk063itzOFnu3gRHtO4M876c3KPzKjBnbqLw== }
 
-  '@le-space/aleph-bootstrap@0.3.7':
+  '@le-space/browser@0.3.12':
     resolution:
-      { integrity: sha512-qsw2YdiBycXQ+wsLk+fDG38qQnS0QP/W5syON3uZPmnYsfUWXIexbMzkT7Tp+Noa7r2OUB8XcDSgb85yHF8xOA== }
+      { integrity: sha512-4XMhEUlpKd6XeRY98vh4IQAGD0eM4OVWMd9tmql1/H5NNidwVvZZ+IdDLAiMT8UCx+9cQj372k7oLopAHc1FBw== }
 
-  '@le-space/browser@0.3.7':
+  '@le-space/core@0.3.12':
     resolution:
-      { integrity: sha512-nMYdqeGhTQV9SqNJ8HIPhpi7CrNZ3RkoLaSMhaYZXZtEtC8DuZpeAGwH7NdI6yVggCu4TbJ7m5JRx7qerII/tg== }
+      { integrity: sha512-+CIp4ldXAih4nh5fp6v3ww0Y58wsCxgq9LzMXXKw0PO8trBrJPhyvQC8CxCR4z6CLV+NTOzT2SyfGsTJC2kN1Q== }
 
-  '@le-space/core@0.3.7':
+  '@le-space/shared-types@0.3.12':
     resolution:
-      { integrity: sha512-SPqFnirUIS5P804fJvyNwQPbGa63A7er4Ju1L4+sWpVwA/JZzCrvBVOJly55QxgtB/Ehu2GzZ4e8VAxBdOSFHA== }
+      { integrity: sha512-mh/TUeq68JwjD2OB9Bv2NbWkqVPw8rx5e8nJkzfBd9MxQxQT9qGDSlWfV77xgXR++2OCftQGlJt6vWwl6OjVrg== }
 
-  '@le-space/shared-types@0.3.7':
+  '@le-space/ui@0.3.12':
     resolution:
-      { integrity: sha512-PhRJpR+9ckJLktOx+1KvH0BGvSpdmL7m7cXYld2/itgjd5Lsn0XR60mmZrMIC89g3eZvTQuVoGwE9wGFogfqzA== }
-
-  '@le-space/ui@0.3.7':
-    resolution:
-      { integrity: sha512-EGr0q+NY7tdkCaZD5AZwPmZ1J7ImYbWFbpthNWtEH1dNsRLXyQ64AXsz4kUet13u1p3yHC+oAesRz/jZ6z83VA== }
+      { integrity: sha512-sJKJmNEf9henTo6u5Mf5Ggcif22n2nzfOIue2IqKInYFSWUzJ78qRXg7NbSoYpb4X0VLco9IYh/ELF6ea+IzqQ== }
     peerDependencies:
       react: '>=18'
       react-dom: '>=18'
@@ -4848,7 +4844,7 @@ snapshots:
     dependencies:
       lodash: 4.18.1
 
-  '@le-space/aleph-bootstrap@0.3.3(typescript@5.4.5)':
+  '@le-space/aleph-bootstrap@0.3.12(typescript@5.4.5)':
     dependencies:
       '@libp2p/bootstrap': 11.0.47
       viem: 2.51.3(typescript@5.4.5)
@@ -4858,34 +4854,24 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@le-space/aleph-bootstrap@0.3.7(typescript@5.4.5)':
+  '@le-space/browser@0.3.12': {}
+
+  '@le-space/core@0.3.12(typescript@5.4.5)':
     dependencies:
-      '@libp2p/bootstrap': 11.0.47
-      viem: 2.51.3(typescript@5.4.5)
+      '@le-space/aleph-bootstrap': 0.3.12(typescript@5.4.5)
+      '@le-space/shared-types': 0.3.12
     transitivePeerDependencies:
       - bufferutil
       - typescript
       - utf-8-validate
       - zod
 
-  '@le-space/browser@0.3.7': {}
+  '@le-space/shared-types@0.3.12': {}
 
-  '@le-space/core@0.3.7(typescript@5.4.5)':
+  '@le-space/ui@0.3.12(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(svelte@5.55.10)(typescript@5.4.5)':
     dependencies:
-      '@le-space/aleph-bootstrap': 0.3.7(typescript@5.4.5)
-      '@le-space/shared-types': 0.3.7
-    transitivePeerDependencies:
-      - bufferutil
-      - typescript
-      - utf-8-validate
-      - zod
-
-  '@le-space/shared-types@0.3.7': {}
-
-  '@le-space/ui@0.3.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(svelte@5.55.10)(typescript@5.4.5)':
-    dependencies:
-      '@le-space/browser': 0.3.7
-      '@le-space/core': 0.3.7(typescript@5.4.5)
+      '@le-space/browser': 0.3.12
+      '@le-space/core': 0.3.12(typescript@5.4.5)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
       svelte: 5.55.10

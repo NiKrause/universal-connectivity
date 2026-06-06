@@ -130,7 +130,7 @@ inputs:
   shared_package_version:
     description: Published @le-space/node version to install for the shared deploy runner
     required: false
-    default: '0.3.8'
+    default: '0.3.12'
   required_ports_json:
     description: JSON array of required internal port-forward declarations
     required: false
