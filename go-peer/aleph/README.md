@@ -8,8 +8,8 @@ At a high level, the Aleph workflow does four things:
 1. build a RootFS image for the UC Go relay
 2. publish that image to IPFS and pin it through Aleph
 3. create an Aleph VM instance from that published RootFS
-4. publish `js-peer` and publish the deployed relay bootstrap registration for
-   runtime discovery
+4. publish `js-peer` and let the deployed relay publish its own bootstrap
+   registration for runtime discovery
 
 This directory exists so UC maintainers can define the UC-specific contract for
 that process without owning a second full copy of the reusable Aleph tooling.
@@ -78,8 +78,9 @@ The normal manual workflow path is:
 5. pin the image on Aleph and wait for the Aleph `STORE` message
 6. publish `js-peer` once
 7. optionally deploy an Aleph VM from that published image
-8. configure the guest, collect the final relay multiaddrs, and publish the
-   relay bootstrap registration to Aleph for runtime discovery
+8. configure the guest, collect the final relay multiaddrs, and wait for the
+   relay guest to publish its bootstrap registration to Aleph for runtime
+   discovery
 9. optionally prune older successful deployments from Aleph
 
 ## Runtime Bootstrap Discovery
@@ -110,6 +111,91 @@ In the current production path on `main`, that means:
 
 Retention cleanup now only needs to track the single published site artifact
 for the successful deployment aggregate.
+
+## Bootstrap Publisher Identity
+
+The relay treats the Aleph bootstrap publisher key and the libp2p relay
+identity as one coherent identity source.
+
+The strategy is:
+
+1. use an explicit bootstrap publisher private key when one is provided
+2. otherwise derive a deterministic bootstrap publisher key from the deploy
+   private key in the workflow path
+3. otherwise let the guest generate and persist a random local bootstrap
+   publisher key
+
+For `go-peer`, that same key also seeds the libp2p identity file whenever the
+relay starts without an existing `identity.key`, so the resulting `peerId` and
+Aleph bootstrap publisher address stay aligned.
+
+For the browser Sponsor Relay path, the relay VM is now responsible for
+publishing its own Aleph bootstrap registration after configure. The browser
+waits for that guest-published registration instead of publishing bootstrap
+records with the wallet address as a mismatched sender.
+
+### Shutdown Cleanup
+
+The preferred delete behavior is now guest-driven:
+
+1. delete/forget requests ask Aleph to stop the VM
+2. the guest receives a normal stop path when the CRN shutdown is graceful
+3. a systemd shutdown hook runs a best-effort Aleph bootstrap deregistration
+   with the guest's own publisher key
+
+This is still best-effort, not a cryptographic guarantee. If a CRN has to
+escalate past graceful shutdown, stale bootstrap posts are still possible, so
+owner-side reconcile remains a safety net.
+
+## Bootstrap Identity Flow
+
+```mermaid
+flowchart TD
+  A[Deploy starts] --> B{Bootstrap publisher key provided?}
+  B -->|Yes| C[Use explicit bootstrap publisher key]
+  B -->|No, workflow path| D[Derive deterministic key from ALEPH_VM_PRIVATE_KEY]
+  B -->|No, browser/guest fallback| E[Generate random guest-local key]
+
+  C --> F[Persist ALEPH_BOOTSTRAP_PUBLISHER_PRIVATE_KEY]
+  D --> F
+  E --> F
+
+  F --> G[go-peer loads GO_PEER_IDENTITY_EVM_PRIVATE_KEY when identity.key is missing]
+  G --> H[libp2p secp256k1 identity file written]
+  H --> I[Relay starts with stable peerId]
+  F --> J[Guest bootstrap refresh publishes relay-bootstrap post]
+  I --> J
+
+  J --> K[js-peer discovers multiaddrs from Aleph bootstrap]
+
+  L[Delete / forget instance] --> M[CRN stop path begins]
+  M --> N[systemd shutdown hook runs guest bootstrap deregister]
+  N --> O[Forget current relay-bootstrap posts]
+```
+
+## Browser Example
+
+The browser integration remains intentionally small. The important part is that
+the UI points at the current `uc-go-peer` manifest and then waits for the guest
+to publish its own bootstrap record:
+
+```tsx
+<SponsorRelayFab
+  libp2p={libp2p}
+  manifestUrl="https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json"
+  sshPublicKey={process.env.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY ?? ""}
+  showInstances={true}
+  instanceName="uc-relay"
+  launcherMode="inline"
+/>
+```
+
+Operationally:
+
+- workflow deploys can still pre-seed a deterministic bootstrap publisher key
+- browser deploys can rely on the guest fallback path
+- both paths converge on a guest-owned relay bootstrap registration that
+  `js-peer` discovers at runtime
 ## AutoTLS, Direct WSS, And Proxy WSS
 
 There are two browser-relevant secure websocket paths:
