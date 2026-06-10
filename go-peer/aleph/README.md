@@ -181,7 +181,6 @@ to publish its own bootstrap record:
 
 ```tsx
 <SponsorRelayFab
-  libp2p={libp2p}
   manifestUrl="https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json"
   sshPublicKey={process.env.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY ?? ""}
   showInstances={true}

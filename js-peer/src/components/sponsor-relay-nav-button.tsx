@@ -1,14 +1,11 @@
 import dynamic from 'next/dynamic'
 import React from 'react'
 
-import { useLibp2pContext } from '@/context/ctx'
-
 const SponsorRelayFab = dynamic(() => import('@le-space/ui/react').then((mod) => mod.SponsorRelayFab), {
   ssr: false,
 })
 
 export default function SponsorRelayNavButton() {
-  const { libp2p } = useLibp2pContext()
   const configuredAlephDomain = process.env.NEXT_PUBLIC_ALEPH_DOMAIN?.trim()
   const manifestUrl = configuredAlephDomain
     ? `https://${configuredAlephDomain}/rootfs/uc-go-peer/latest.json`
@@ -37,7 +34,6 @@ export default function SponsorRelayNavButton() {
       }
     >
       <SponsorRelayFab
-        libp2p={libp2p}
         manifestUrl={manifestUrl}
         sshPublicKey={process.env.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY ?? ''}
         showInstances={true}
