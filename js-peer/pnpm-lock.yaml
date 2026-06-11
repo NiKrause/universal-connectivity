@@ -26,11 +26,11 @@ importers:
         specifier: ^2.1.3
         version: 2.2.0(react@18.3.1)
       '@le-space/aleph-bootstrap':
-        specifier: 0.3.24
-        version: 0.3.24(typescript@5.4.5)
+        specifier: 0.3.32
+        version: 0.3.32(typescript@5.4.5)
       '@le-space/ui':
-        specifier: 0.3.24
-        version: 0.3.24(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(svelte@5.55.10)(typescript@5.4.5)
+        specifier: 0.3.32
+        version: 0.3.32(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(svelte@5.55.10)(typescript@5.4.5)
       '@libp2p/bootstrap':
         specifier: ^11.0.28
         version: 11.0.47
@@ -440,25 +440,25 @@ packages:
       { integrity: sha512-TuB0x50EoAvEX/UEWITd8Mkn3WhiTjSvbTMCLj0BhsQEl5iUzjXdA0bETEVpTk+5TGTLR6QktI9H4hLviVeaAQ== }
     engines: { node: '>=v12.0.0' }
 
-  '@le-space/aleph-bootstrap@0.3.24':
+  '@le-space/aleph-bootstrap@0.3.32':
     resolution:
-      { integrity: sha512-bj6VnOxgUUWdIlMK/IkDUKo4R0FH7G5WzjVhitn4MwWPFo4jzM40rbMGoM9q3ti8Y9BNv4H3AFI2AxIigyu4tw== }
+      { integrity: sha512-7kiiio4d9A6Zts5a5kOh18Y4V1ZSUx3/+pVm9dEREBJw9ex0gzp5gBjnfb3EYqqKewCHP/AwYFYT5T8UEu0siw== }
 
-  '@le-space/browser@0.3.24':
+  '@le-space/browser@0.3.32':
     resolution:
-      { integrity: sha512-DNeHjybssBYBJBU9HLL3JeqvcGiz96jO+qDcr2Pr/42qBeJLewUCypde5vh+Pt9U3bIis/C6VjQ1y47uRz9ocg== }
+      { integrity: sha512-dTh3FPuQKZDvzXhiUsEU5id0VL82pHnIo0clWi5pEwLRokYO+gRd1NaeTe+sf0Ukz0iKCyDr9ycNg3FYhiUQJQ== }
 
-  '@le-space/core@0.3.24':
+  '@le-space/core@0.3.32':
     resolution:
-      { integrity: sha512-RxKDoMEsUo/b6a0CiJehEnIaWFto/wfSRxWcckdkr+AXtnk8LuczCSPB/mIFnWpSQdCPWkTzK9AZADCzkpCsNg== }
+      { integrity: sha512-Ch5Jd+ddQZ/v+dDIwGjTyiqrAsQogMO2kYeX6A0goEHCFU8H71vPUkcnmkToVR/KE1dC55x0n1TcRjr/eQSSTg== }
 
-  '@le-space/shared-types@0.3.24':
+  '@le-space/shared-types@0.3.32':
     resolution:
-      { integrity: sha512-mEu1oQdOCbmEvKlNclujHVnNjypIIdutPp7CHlTCSvjhJTLu0k82SCMbKQzVHJEJnub5zoiKIaSKenTPX6wz3Q== }
+      { integrity: sha512-WPyNIG0rcjMzImcMnMfERoFON+5qbSr/ahP58yJaFUtX6DjgLWe6vm6mdfqWHtHbYd+5WaFKvZ9Da3cjv1oaJw== }
 
-  '@le-space/ui@0.3.24':
+  '@le-space/ui@0.3.32':
     resolution:
-      { integrity: sha512-TofUrCnUtRbFnSMxbG1RyZFnL9F2RM0jW0mfckjAhd9I4S9Wplf4S6HDZhgNZ6/oOOohnVSxzXXzIh6Pp23YFw== }
+      { integrity: sha512-g4LZMztLR7nxr87WSfI7Lf1dr0Bm8DSTCanY0F6StF+JLjGgnUB98g8SRql6mo7e80Mg9dkep5zz/CvGba87hg== }
     peerDependencies:
       react: '>=18'
       react-dom: '>=18'
@@ -4844,7 +4844,7 @@ snapshots:
     dependencies:
       lodash: 4.18.1
 
-  '@le-space/aleph-bootstrap@0.3.24(typescript@5.4.5)':
+  '@le-space/aleph-bootstrap@0.3.32(typescript@5.4.5)':
     dependencies:
       '@libp2p/bootstrap': 11.0.47
       viem: 2.51.3(typescript@5.4.5)
@@ -4854,24 +4854,24 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@le-space/browser@0.3.24': {}
+  '@le-space/browser@0.3.32': {}
 
-  '@le-space/core@0.3.24(typescript@5.4.5)':
+  '@le-space/core@0.3.32(typescript@5.4.5)':
     dependencies:
-      '@le-space/aleph-bootstrap': 0.3.24(typescript@5.4.5)
-      '@le-space/shared-types': 0.3.24
+      '@le-space/aleph-bootstrap': 0.3.32(typescript@5.4.5)
+      '@le-space/shared-types': 0.3.32
     transitivePeerDependencies:
       - bufferutil
       - typescript
       - utf-8-validate
       - zod
 
-  '@le-space/shared-types@0.3.24': {}
+  '@le-space/shared-types@0.3.32': {}
 
-  '@le-space/ui@0.3.24(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(svelte@5.55.10)(typescript@5.4.5)':
+  '@le-space/ui@0.3.32(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(svelte@5.55.10)(typescript@5.4.5)':
     dependencies:
-      '@le-space/browser': 0.3.24
-      '@le-space/core': 0.3.24(typescript@5.4.5)
+      '@le-space/browser': 0.3.32
+      '@le-space/core': 0.3.32(typescript@5.4.5)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
       svelte: 5.55.10
