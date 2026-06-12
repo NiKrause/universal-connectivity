@@ -2,16 +2,16 @@ This is a [Next.js](https://nextjs.org/) project for the Universal Connectivity 
 
 ## Getting Started
 
-Install dependencies with `pnpm`:
+Install dependencies with `npm`:
 
 ```bash
-pnpm install
+npm install
 ```
 
 Start the development server:
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
@@ -19,7 +19,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 Useful commands:
 
 ```bash
-pnpm lint
-pnpm build
-pnpm start
+npm run lint
+npm run build
+npm run start
 ```

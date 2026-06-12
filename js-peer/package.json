@@ -1,6 +1,5 @@
 {
   "name": "universal-connectivity-browser",
-  "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "next dev --experimental-https",
     "build": "next build",
