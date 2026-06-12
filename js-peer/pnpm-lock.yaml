@@ -40,6 +40,12 @@ importers:
       '@libp2p/identify':
         specifier: ^3.0.23
         version: 3.0.39
+      '@libp2p/interface':
+        specifier: ^2.11.0
+        version: 2.11.0
+      '@libp2p/interface-internal':
+        specifier: ^2.3.12
+        version: 2.3.19
       '@libp2p/interface-pubsub':
         specifier: ^4.0.1
         version: 4.0.1
