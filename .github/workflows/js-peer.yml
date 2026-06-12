@@ -5,11 +5,12 @@ env:
 
 permissions:
   contents: read
-  pull-requests: write
-  statuses: write
+  pages: write
+  id-token: write
 
 on:
   push:
+    branches: [main]
     paths:
       - 'js-peer/**'
       - '.github/workflows/js-peer.yml'
@@ -19,63 +20,56 @@ on:
       - 'js-peer/**'
       - '.github/workflows/js-peer.yml'
 
+concurrency:
+  group: js-peer-pages
+  cancel-in-progress: true
+
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
-    env:
-      ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
-      NEXT_PUBLIC_ALEPH_DOMAIN: ${{ vars.NEXT_PUBLIC_ALEPH_DOMAIN != '' && vars.NEXT_PUBLIC_ALEPH_DOMAIN || vars.ALEPH_DOMAIN }}
-      NEXT_PUBLIC_VM_SSH_PUBLIC_KEY: ${{ vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY != '' && vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
     defaults:
       run:
         working-directory: js-peer
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/configure-pages@v5
+        id: pages
       - uses: actions/setup-node@v6
         with:
           node-version: '24.x'
       - run: npm ci
       - run: npm run lint
-      - run: npm run build
-      - name: Deploy preview on Aleph for PRs
-        id: deploy
-        if: github.event_name == 'pull_request'
-        uses: aleph-im/web3-hosting-action@v1.1.4
+      - name: Build static js-peer site
+        env:
+          GITHUB_PAGES: 'true'
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: npm run build
+      - name: Upload GitHub Pages artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: js-peer/out
-      - name: Deploy preview on Aleph for branch pushes
-        id: deploy_branch
-        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
-        uses: aleph-im/web3-hosting-action@v1.1.4
-        with:
-          path: js-peer/out
-          private-key: ${{ env.ALEPH_PRIVATE_KEY }}
-          retention_days: ${{ vars.ALEPH_RETENTION_DAYS }}
-      - name: Summarize Aleph preview deployment
-        if: (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref != 'refs/heads/main')
+      - name: Summarize GitHub Pages build
         run: |
           {
-            echo '## Aleph Preview Deployment'
+            echo '## GitHub Pages Build'
             echo
-            if [[ -n "${URL:-}" ]]; then
-              echo "- URL: ${URL}"
-            fi
-            if [[ -n "${ITEM_HASH:-}" ]]; then
-              echo "- Item hash: ${ITEM_HASH}"
-            fi
-            if [[ -n "${CID:-}" ]]; then
-              echo "- CID: ${CID}"
-            fi
-            if [[ -z "${URL:-}${ITEM_HASH:-}${CID:-}" ]]; then
-              echo '- Preview deployment finished, but no URL/CID output was exposed by the action.'
+            echo "- Pages base path: \`${{ steps.pages.outputs.base_path }}\`"
+            if [[ "${{ github.event_name }}" == "push" ]]; then
+              echo '- Deployment target: GitHub Pages'
+            else
+              echo '- Pull requests build the static site but do not deploy it.'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Summarize production ownership
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          {
-            echo '## Production Publish Ownership'
-            echo
-            echo '- The custom domain is intentionally managed by `build-aleph-go-peer-rootfs.yml`.'
-            echo '- This `js-peer` workflow only verifies the browser app build on `main` so it does not overwrite `/rootfs/uc-go-peer/latest.json`.'
-          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
