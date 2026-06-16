@@ -12,7 +12,7 @@ inputs:
   api_host:
     description: Aleph API host
     required: false
-    default: https://api2.aleph.im
+    default: https://api.aleph.im
   crn_list_url:
     description: Aleph CRN list endpoint
     required: false
@@ -130,7 +130,7 @@ inputs:
   shared_package_version:
     description: Published @le-space/node version to install for the shared deploy runner
     required: false
-    default: '0.3.20'
+    default: '0.4.5'
   required_ports_json:
     description: JSON array of required internal port-forward declarations
     required: false

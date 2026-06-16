@@ -2,7 +2,7 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.4.4
+  SHARED_ALEPH_NODE_VERSION: 0.4.5
 
 on:
   workflow_call:
@@ -398,6 +398,7 @@ jobs:
           enable_caddy_proxy: ${{ inputs.vm_enable_caddy_proxy && 'true' || 'false' }}
           auto_configure: 'true'
           verify_reachability: 'true'
+          shared_package_version: ${{ env.SHARED_ALEPH_NODE_VERSION }}
 
       - name: Probe published and browser bootstrap relay multiaddrs
         if: ${{ inputs.deploy_vm }}
@@ -442,7 +443,7 @@ jobs:
         env:
           ALEPH_VM_MODE: retain-successful-deployments
           ALEPH_VM_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
-          ALEPH_VM_API_HOST: https://api2.aleph.im
+          ALEPH_VM_API_HOST: https://api.aleph.im
           ALEPH_VM_CHANNEL: TEST
           ALEPH_VM_RETENTION_KEEP_COUNT: ${{ inputs.retain_successful_deployments }}
           ALEPH_VM_RETENTION_EXTRA_FORGET_HASHES_JSON: '[]'
