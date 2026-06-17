@@ -315,12 +315,12 @@ runtime from scratch after boot.
 - This keeps workflow ownership in UC while the low-level Aleph implementation
   stays reusable in the shared tooling repo.
 - If you need to change guest behavior itself, the implementation most likely
-  lives in `shared-aleph-tooling`, not here.
+  lives in `relay-button`, not here.
 - If you need to change the UC deployment contract, ports, manifest notes, or
   workflow behavior, this repo is the right place.
 - Retention currently keeps the latest two successful published+deployed
   records, prunes older deployment records and their dependent `STORE`
   messages, and may also prune the initial site publish from the newest run
   after the final republished site replaces it.
-- During the rebrand transition, some package names and GitHub URLs may still
-  use `shared-aleph-tooling` until the upstream repository slug is renamed.
+- The upstream shared tooling repository is `relay-button`, while packages
+  continue to publish under the `@le-space/*` scope.
