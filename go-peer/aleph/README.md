@@ -35,7 +35,7 @@ that process without owning a second full copy of the reusable Aleph tooling.
 The reusable implementation lives in the standalone Aleph tooling repo and the
 published packages:
 
-- `NiKrause/shared-aleph-tooling`
+- `NiKrause/relay-button`
 - `@le-space/rootfs`
 - `@le-space/node`
 
@@ -251,7 +251,7 @@ After guest configuration, the workflow probes the returned relay multiaddrs.
 
 The ownership split for that probe is:
 
-- shared-aleph-tooling owns the probe runner implementation in
+- relay-button owns the probe runner implementation in
   `packages/node/src/relay-probe.ts`
 - `universal-connectivity` owns the policy contract in
   `go-peer/aleph/relay-probe-policy.json`
@@ -322,3 +322,5 @@ runtime from scratch after boot.
   records, prunes older deployment records and their dependent `STORE`
   messages, and may also prune the initial site publish from the newest run
   after the final republished site replaces it.
+- During the rebrand transition, some package names and GitHub URLs may still
+  use `shared-aleph-tooling` until the upstream repository slug is renamed.
