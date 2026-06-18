@@ -280,6 +280,7 @@ jobs:
             qemu-utils \
             squashfs-tools \
             tar
+          sudo chmod 0644 /boot/vmlinuz-* || true
 
       - name: Build uc-go-peer rootfs through shared runner
         id: build_rootfs
@@ -294,6 +295,7 @@ jobs:
           ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_DELAY_SECONDS: '5'
           ALEPH_ROOTFS_DRIVER: host
           ALEPH_ROOTFS_HAS_VIRT_CUSTOMIZE: 'true'
+          LIBGUESTFS_BACKEND: direct
           TMPDIR: /mnt/uc-go-peer-tmp
         run: |
           sudo mkdir -p "$TMPDIR"
