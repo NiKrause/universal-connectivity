@@ -292,12 +292,13 @@ jobs:
           ALEPH_ROOTFS_SKIP_UPLOAD: ${{ inputs.publish && 'false' || 'true' }}
           ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
           ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_DELAY_SECONDS: '5'
-          ALEPH_ROOTFS_DRIVER: docker
+          ALEPH_ROOTFS_DRIVER: host
           ALEPH_ROOTFS_HAS_VIRT_CUSTOMIZE: 'true'
-          ALEPH_ROOTFS_HAS_DOCKER: 'true'
-          ALEPH_ROOTFS_DOCKER_DAEMON_RUNNING: 'true'
+          TMPDIR: /mnt/uc-go-peer-tmp
         run: |
-          workdir="$(mktemp -d)"
+          mkdir -p "$TMPDIR"
+          chmod 1777 "$TMPDIR" || true
+          workdir="$(mktemp -d "$TMPDIR/uc-go-peer-runner.XXXXXX")"
           cd "$workdir"
           npm init -y >/dev/null 2>&1
           npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
