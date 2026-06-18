@@ -296,8 +296,8 @@ jobs:
           ALEPH_ROOTFS_HAS_VIRT_CUSTOMIZE: 'true'
           TMPDIR: /mnt/uc-go-peer-tmp
         run: |
-          mkdir -p "$TMPDIR"
-          chmod 1777 "$TMPDIR" || true
+          sudo mkdir -p "$TMPDIR"
+          sudo chmod 1777 "$TMPDIR"
           workdir="$(mktemp -d "$TMPDIR/uc-go-peer-runner.XXXXXX")"
           cd "$workdir"
           npm init -y >/dev/null 2>&1
