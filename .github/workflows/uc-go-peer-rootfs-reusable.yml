@@ -2,7 +2,7 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.5.2
+  SHARED_ALEPH_NODE_VERSION: 0.6.0
 
 on:
   workflow_call:
@@ -281,6 +281,7 @@ jobs:
             squashfs-tools \
             tar
           sudo chmod 0644 /boot/vmlinuz-* || true
+          sudo chmod 0666 /dev/kvm || true
 
       - name: Build uc-go-peer rootfs through shared runner
         id: build_rootfs
@@ -300,6 +301,13 @@ jobs:
         run: |
           sudo mkdir -p "$TMPDIR"
           sudo chmod 1777 "$TMPDIR"
+          mkdir -p "$TMPDIR/bin"
+          {
+            echo '#!/usr/bin/env bash'
+            echo 'exec /usr/bin/virt-customize --no-network "$@"'
+          } > "$TMPDIR/bin/virt-customize"
+          chmod 0755 "$TMPDIR/bin/virt-customize"
+          export PATH="$TMPDIR/bin:$PATH"
           workdir="$(mktemp -d "$TMPDIR/uc-go-peer-runner.XXXXXX")"
           cd "$workdir"
           npm init -y >/dev/null 2>&1
