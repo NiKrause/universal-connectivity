@@ -63,7 +63,7 @@ on:
         default: '1024'
         type: string
       vm_rootfs_size_mib:
-        description: Rootfs disk size in MiB for the deployed uc-go-peer VM
+        description: Rootfs disk size in MiB for the built image and deployed uc-go-peer VM
         required: false
         default: '20480'
         type: string
@@ -292,6 +292,8 @@ jobs:
           ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
           ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_DELAY_SECONDS: '5'
           ALEPH_ROOTFS_DRIVER: docker
+          ALEPH_ROOTFS_SIZE_MIB: ${{ inputs.vm_rootfs_size_mib }}
+          ALEPH_ROOTFS_IMAGE_SIZE: ${{ inputs.vm_rootfs_size_mib }}M
           TMPDIR: /mnt/uc-go-peer-tmp
         run: |
           mkdir -p "$TMPDIR/bin"

@@ -59,7 +59,7 @@ on:
         default: '1024'
         type: string
       vm_rootfs_size_mib:
-        description: Rootfs disk size in MiB for the deployed uc-go-peer VM
+        description: Rootfs disk size in MiB for the built image and deployed uc-go-peer VM
         required: false
         default: '20480'
         type: string
