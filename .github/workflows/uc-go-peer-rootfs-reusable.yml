@@ -409,6 +409,7 @@ jobs:
           preferred_country_code: ${{ inputs.vm_preferred_country_code }}
           geo_crn_limit: ${{ inputs.vm_geo_crn_limit }}
           max_crn_attempts: ${{ inputs.vm_max_crn_attempts }}
+          channel: ALEPH-CLOUDSOLUTIONS
           enable_caddy_proxy: ${{ inputs.vm_enable_caddy_proxy && 'true' || 'false' }}
           auto_configure: 'true'
           verify_reachability: 'true'
@@ -458,7 +459,7 @@ jobs:
           ALEPH_VM_MODE: retain-successful-deployments
           ALEPH_VM_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
           ALEPH_VM_API_HOST: https://api.aleph.im
-          ALEPH_VM_CHANNEL: TEST
+          ALEPH_VM_CHANNEL: ALEPH-CLOUDSOLUTIONS
           ALEPH_VM_RETENTION_KEEP_COUNT: ${{ inputs.retain_successful_deployments }}
           ALEPH_VM_RETENTION_EXTRA_FORGET_HASHES_JSON: '[]'
           ALEPH_VM_RETENTION_CURRENT_RECORD_JSON: >-
