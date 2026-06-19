@@ -2,7 +2,7 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.6.0
+  SHARED_ALEPH_NODE_VERSION: 0.6.2
 
 on:
   workflow_call:
@@ -46,6 +46,11 @@ on:
         description: Optional target CRN hash for the uc-go-peer credit deployment
         required: false
         default: ''
+        type: string
+      vm_placement_strategy:
+        description: Placement mode when vm_crn_hash is empty; scheduler uses Aleph placement, manual iterates ranked CRNs
+        required: false
+        default: scheduler
         type: string
       vm_vcpus:
         description: Requested vCPU count for the uc-go-peer VM
@@ -395,6 +400,7 @@ jobs:
           rootfs_item_hash: ${{ steps.collect_rootfs_outputs.outputs.rootfs_item_hash }}
           rootfs_version: ${{ env.ROOTFS_VERSION }}
           rootfs_size_mib: ${{ inputs.vm_rootfs_size_mib }}
+          placement_strategy: ${{ inputs.vm_placement_strategy }}
           crn_hash: ${{ inputs.vm_crn_hash }}
           vcpus: ${{ inputs.vm_vcpus }}
           memory_mib: ${{ inputs.vm_memory_mib }}

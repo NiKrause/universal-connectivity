@@ -35,6 +35,10 @@ inputs:
     description: Rootfs volume size in MiB
     required: false
     default: '20480'
+  placement_strategy:
+    description: Placement mode for deployments without an explicit CRN hash; use scheduler for Aleph scheduler placement or manual for CRN retry iteration
+    required: false
+    default: scheduler
   crn_hash:
     description: Target CRN hash for the credit deployment
     required: false
@@ -130,7 +134,7 @@ inputs:
   shared_package_version:
     description: Published @le-space/node version to install for the shared deploy runner
     required: false
-    default: '0.6.0'
+    default: '0.6.2'
   required_ports_json:
     description: JSON array of required internal port-forward declarations
     required: false
@@ -232,6 +236,7 @@ runs:
         ALEPH_VM_ROOTFS_ITEM_HASH: ${{ inputs.rootfs_item_hash }}
         ALEPH_VM_ROOTFS_VERSION: ${{ inputs.rootfs_version }}
         ALEPH_VM_ROOTFS_SIZE_MIB: ${{ inputs.rootfs_size_mib }}
+        ALEPH_VM_PLACEMENT_STRATEGY: ${{ inputs.placement_strategy }}
         ALEPH_VM_CRN_HASH: ${{ inputs.crn_hash }}
         ALEPH_VM_VCPUS: ${{ inputs.vcpus }}
         ALEPH_VM_MEMORY_MIB: ${{ inputs.memory_mib }}
