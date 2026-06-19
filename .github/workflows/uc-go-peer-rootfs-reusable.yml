@@ -268,19 +268,11 @@ jobs:
             exit 1
           fi
 
-      - name: Install rootfs build dependencies
+      - name: Prepare rootfs Docker builder
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            curl \
-            libguestfs-tools \
-            libsecp256k1-dev \
-            python3 \
-            python3-pip \
-            qemu-utils \
-            squashfs-tools \
-            tar
-          sudo chmod 0644 /boot/vmlinuz-* || true
+          docker info
+          sudo mkdir -p /mnt/uc-go-peer-tmp/docker-tmp
+          sudo chmod 1777 /mnt/uc-go-peer-tmp /mnt/uc-go-peer-tmp/docker-tmp
           sudo chmod 0666 /dev/kvm || true
 
       - name: Build uc-go-peer rootfs through shared runner
@@ -294,19 +286,21 @@ jobs:
           ALEPH_ROOTFS_SKIP_UPLOAD: ${{ inputs.publish && 'false' || 'true' }}
           ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
           ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_DELAY_SECONDS: '5'
-          ALEPH_ROOTFS_DRIVER: host
-          ALEPH_ROOTFS_HAS_VIRT_CUSTOMIZE: 'true'
-          LIBGUESTFS_BACKEND: direct
+          ALEPH_ROOTFS_DRIVER: docker
           TMPDIR: /mnt/uc-go-peer-tmp
         run: |
-          sudo mkdir -p "$TMPDIR"
-          sudo chmod 1777 "$TMPDIR"
           mkdir -p "$TMPDIR/bin"
           {
             echo '#!/usr/bin/env bash'
-            echo 'exec /usr/bin/virt-customize --no-network "$@"'
-          } > "$TMPDIR/bin/virt-customize"
-          chmod 0755 "$TMPDIR/bin/virt-customize"
+            echo 'set -euo pipefail'
+            echo 'if [[ "${1:-}" == "run" && -n "${UC_ROOTFS_DOCKER_TMPDIR:-}" ]]; then'
+            echo '  shift'
+            echo '  exec /usr/bin/docker run -v "${UC_ROOTFS_DOCKER_TMPDIR}:/tmp" -e TMPDIR=/tmp "$@"'
+            echo 'fi'
+            echo 'exec /usr/bin/docker "$@"'
+          } > "$TMPDIR/bin/docker"
+          chmod 0755 "$TMPDIR/bin/docker"
+          export UC_ROOTFS_DOCKER_TMPDIR="$TMPDIR/docker-tmp"
           export PATH="$TMPDIR/bin:$PATH"
           workdir="$(mktemp -d "$TMPDIR/uc-go-peer-runner.XXXXXX")"
           cd "$workdir"
