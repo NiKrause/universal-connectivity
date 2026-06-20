@@ -12,7 +12,7 @@ inputs:
   api_host:
     description: Aleph API host
     required: false
-    default: https://api2.aleph.im
+    default: https://api.aleph.im
   crn_list_url:
     description: Aleph CRN list endpoint
     required: false
@@ -58,7 +58,7 @@ inputs:
   channel:
     description: Aleph channel
     required: false
-    default: ALEPH-CLOUDSOLUTIONS
+    default: TEST
   wait_attempts:
     description: Poll attempts while waiting for Aleph to process the deployment
     required: false
