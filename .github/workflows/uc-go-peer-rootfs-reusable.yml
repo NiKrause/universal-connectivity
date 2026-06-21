@@ -3,6 +3,7 @@ name: uc-go-peer rootfs reusable
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   SHARED_ALEPH_NODE_VERSION: 0.6.4
+  SHARED_ALEPH_NODE_SOURCE: source
 
 on:
   workflow_call:
@@ -91,6 +92,11 @@ on:
         description: Keep only the latest N successful published+deployed uc-go-peer deployments and forget older Aleph INSTANCE/STORE messages
         required: false
         default: '2'
+        type: string
+      shared_aleph_node_ref:
+        description: relay-button ref to checkout for shared @le-space/node source mode
+        required: false
+        default: main
         type: string
     secrets:
       ALEPH_PRIVATE_KEY:
@@ -199,10 +205,28 @@ jobs:
         with:
           path: universal-connectivity
 
+      - name: Checkout relay-button shared tooling
+        if: ${{ env.SHARED_ALEPH_NODE_SOURCE == 'source' }}
+        uses: actions/checkout@v5
+        with:
+          repository: NiKrause/relay-button
+          ref: ${{ inputs.shared_aleph_node_ref }}
+          path: relay-button
+
       - name: Set up Node
         uses: actions/setup-node@v5
         with:
           node-version: '24.x'
+
+      - name: Export relay-button shared tooling path
+        if: ${{ env.SHARED_ALEPH_NODE_SOURCE == 'source' }}
+        run: echo "SHARED_ALEPH_NODE_LOCAL_PATH=${{ github.workspace }}/relay-button" >> "$GITHUB_ENV"
+
+      - name: Install relay-button shared tooling
+        if: ${{ env.SHARED_ALEPH_NODE_SOURCE == 'source' }}
+        run: |
+          corepack enable
+          pnpm --dir "${{ github.workspace }}/relay-button" install --frozen-lockfile
 
       - name: Load uc-go-peer rootfs profile
         working-directory: universal-connectivity
@@ -310,9 +334,11 @@ jobs:
           export PATH="$TMPDIR/bin:$PATH"
           workdir="$(mktemp -d "$TMPDIR/uc-go-peer-runner.XXXXXX")"
           cd "$workdir"
-          npm init -y >/dev/null 2>&1
-          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
-          node --input-type=module -e "import { runRootfsMode } from '@le-space/node'; await runRootfsMode(process.env);"
+          if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
+            npm init -y >/dev/null 2>&1
+            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          fi
+          node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runRootfsMode
 
       - name: Build js-peer site with latest rootfs manifest
         if: ${{ inputs.publish }}
@@ -339,9 +365,11 @@ jobs:
         run: |
           workdir="$(mktemp -d)"
           cd "$workdir"
-          npm init -y >/dev/null 2>&1
-          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
-          node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
+          if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
+            npm init -y >/dev/null 2>&1
+            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          fi
+          node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
 
       - name: Link production domain through shared runner
         if: ${{ inputs.publish && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
@@ -357,9 +385,11 @@ jobs:
           fi
           workdir="$(mktemp -d)"
           cd "$workdir"
-          npm init -y >/dev/null 2>&1
-          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
-          node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
+          if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
+            npm init -y >/dev/null 2>&1
+            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          fi
+          node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
 
       - name: Collect rootfs publish outputs
         id: collect_rootfs_outputs
@@ -413,6 +443,8 @@ jobs:
           auto_configure: 'true'
           verify_reachability: 'true'
           shared_package_version: ${{ env.SHARED_ALEPH_NODE_VERSION }}
+          shared_package_source: ${{ env.SHARED_ALEPH_NODE_SOURCE }}
+          shared_package_path: ${{ github.workspace }}/relay-button
 
       - name: Probe published and browser bootstrap relay multiaddrs
         if: ${{ inputs.deploy_vm }}
@@ -429,9 +461,11 @@ jobs:
         run: |
           workdir="$(mktemp -d)"
           cd "$workdir"
-          npm init -y >/dev/null 2>&1
-          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
-          node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
+          if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
+            npm init -y >/dev/null 2>&1
+            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          fi
+          node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
 
       - name: Relink production domain through shared runner
         if: ${{ inputs.publish && inputs.deploy_vm && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
@@ -447,9 +481,11 @@ jobs:
           fi
           workdir="$(mktemp -d)"
           cd "$workdir"
-          npm init -y >/dev/null 2>&1
-          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
-          node --input-type=module -e "import { runSiteMode } from '@le-space/node'; await runSiteMode(process.env);"
+          if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
+            npm init -y >/dev/null 2>&1
+            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          fi
+          node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
 
       - name: Retain latest successful deployments
         if: ${{ inputs.publish && inputs.deploy_vm && fromJSON(inputs.retain_successful_deployments) > 0 }}
@@ -467,9 +503,11 @@ jobs:
           set -euo pipefail
           workdir="$(mktemp -d)"
           cd "${workdir}"
-          npm init -y >/dev/null 2>&1
-          npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
-          node --input-type=module -e "import { runActionMode } from '@le-space/node'; await runActionMode(process.env);"
+          if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
+            npm init -y >/dev/null 2>&1
+            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          fi
+          node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runActionMode
 
       - name: Export reusable workflow outputs
         if: ${{ always() }}

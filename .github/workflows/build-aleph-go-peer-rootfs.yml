@@ -83,6 +83,11 @@ on:
         required: false
         default: true
         type: boolean
+      shared_aleph_node_ref:
+        description: relay-button ref to checkout for shared @le-space/node source mode
+        required: false
+        default: main
+        type: string
 
 permissions:
   contents: read
@@ -111,6 +116,7 @@ jobs:
       vm_geo_crn_limit: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_geo_crn_limit || '30' }}
       vm_max_crn_attempts: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_max_crn_attempts || '5' }}
       vm_enable_caddy_proxy: ${{ github.event_name == 'push' || inputs.vm_enable_caddy_proxy }}
+      shared_aleph_node_ref: ${{ github.event_name == 'workflow_dispatch' && inputs.shared_aleph_node_ref || 'main' }}
     secrets:
       ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
       VM_SSH_PUBLIC_KEY: ${{ secrets.VM_SSH_PUBLIC_KEY }}

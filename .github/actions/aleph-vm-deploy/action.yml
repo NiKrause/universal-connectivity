@@ -135,6 +135,14 @@ inputs:
     description: Published @le-space/node version to install for the shared deploy runner
     required: false
     default: '0.6.4'
+  shared_package_source:
+    description: Use npm for the published package or source for a checked-out relay-button workspace
+    required: false
+    default: npm
+  shared_package_path:
+    description: Path to the relay-button checkout when shared_package_source is source
+    required: false
+    default: ''
   required_ports_json:
     description: JSON array of required internal port-forward declarations
     required: false
@@ -261,10 +269,14 @@ runs:
         ALEPH_VM_AUTO_CONFIGURE: ${{ inputs.auto_configure }}
         ALEPH_VM_VERIFY_REACHABILITY: ${{ inputs.verify_reachability }}
         ALEPH_VM_REQUIRED_PORTS_JSON: ${{ inputs.required_ports_json }}
+        SHARED_ALEPH_NODE_SOURCE: ${{ inputs.shared_package_source }}
+        SHARED_ALEPH_NODE_LOCAL_PATH: ${{ inputs.shared_package_path }}
       run: |
         set -euo pipefail
         workdir="$(mktemp -d)"
         cd "${workdir}"
-        npm init -y >/dev/null 2>&1
-        npm install --no-save --no-package-lock @le-space/node@${{ inputs.shared_package_version }}
-        node --input-type=module -e "import { runActionMode } from '@le-space/node'; await runActionMode(process.env);"
+        if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
+          npm init -y >/dev/null 2>&1
+          npm install --no-save --no-package-lock @le-space/node@${{ inputs.shared_package_version }}
+        fi
+        node "${{ github.action_path }}/../../scripts/run-shared-aleph-node.mjs" runActionMode
