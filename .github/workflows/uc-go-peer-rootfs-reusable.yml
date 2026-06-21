@@ -226,6 +226,9 @@ jobs:
         if: ${{ env.SHARED_ALEPH_NODE_SOURCE == 'source' }}
         run: |
           corepack enable
+          shared_package_manager="$(node -p "require(process.argv[1]).packageManager" "${{ github.workspace }}/relay-button/package.json")"
+          corepack prepare "${shared_package_manager}" --activate
+          pnpm --version
           pnpm --dir "${{ github.workspace }}/relay-button" install --frozen-lockfile
 
       - name: Load uc-go-peer rootfs profile
@@ -595,7 +598,11 @@ jobs:
             fi
             echo
             echo "- Builder path: \`@le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }} -> runRootfsMode(...), runSiteMode(...)\`"
-            echo "- Shared tooling source: \`npm:@le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}\`"
+            if [[ "${SHARED_ALEPH_NODE_SOURCE}" == "source" ]]; then
+              echo "- Shared tooling source: \`source:NiKrause/relay-button@${{ inputs.shared_aleph_node_ref }}\`"
+            else
+              echo "- Shared tooling source: \`npm:@le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}\`"
+            fi
             echo "- Rootfs profile: \`${ROOTFS_PROFILE}\`"
             echo "- Install mode: \`${ROOTFS_INSTALL_MODE}\`"
             echo "- Guest executable: \`${ROOTFS_BINARY_PATH}\`"
