@@ -28,6 +28,11 @@ on:
         required: false
         default: ''
         type: string
+      aleph_api_hosts:
+        description: Comma-, space-, or newline-separated Aleph API hosts to try in order for rootfs publishing and VM deployment
+        required: false
+        default: 'https://api.aleph.im,https://api2.aleph.im,https://api3.aleph.im'
+        type: string
       deploy_vm:
         description: Deploy a uc-go-peer VM from the published rootfs and verify reachability
         required: false
@@ -176,6 +181,8 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
+      ALEPH_VM_API_HOSTS: ${{ inputs.aleph_api_hosts }}
+      ALEPH_ROOTFS_ALEPH_API_HOSTS: ${{ inputs.aleph_api_hosts }}
     outputs:
       rootfs_version: ${{ steps.export_outputs.outputs.rootfs_version }}
       rootfs_cid: ${{ steps.export_outputs.outputs.rootfs_cid }}
@@ -434,6 +441,7 @@ jobs:
           rootfs_item_hash: ${{ steps.collect_rootfs_outputs.outputs.rootfs_item_hash }}
           rootfs_version: ${{ env.ROOTFS_VERSION }}
           rootfs_size_mib: ${{ inputs.vm_rootfs_size_mib }}
+          api_hosts: ${{ inputs.aleph_api_hosts }}
           placement_strategy: ${{ inputs.vm_placement_strategy }}
           crn_hash: ${{ inputs.vm_crn_hash }}
           vcpus: ${{ inputs.vm_vcpus }}
