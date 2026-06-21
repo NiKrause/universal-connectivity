@@ -229,7 +229,7 @@ jobs:
           shared_package_manager="$(node -p "require(process.argv[1]).packageManager" "${{ github.workspace }}/relay-button/package.json")"
           corepack prepare "${shared_package_manager}" --activate
           pnpm --version
-          pnpm --dir "${{ github.workspace }}/relay-button" install --frozen-lockfile
+          pnpm --dir "${{ github.workspace }}/relay-button" --filter @le-space/node... install --frozen-lockfile
 
       - name: Load uc-go-peer rootfs profile
         working-directory: universal-connectivity
