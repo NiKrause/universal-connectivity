@@ -370,7 +370,7 @@ jobs:
           ALEPH_SITE_DIRECTORY: js-peer/out
           ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
           ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
-          ALEPH_SITE_REF: uc-go-peer-prod
+          ALEPH_SITE_REF: ${{ inputs.aleph_domain != '' && inputs.aleph_domain || 'uc-go-peer-prod' }}
           ALEPH_SITE_RETENTION_KEEP_COUNT: '5'
         run: |
           workdir="$(mktemp -d)"
