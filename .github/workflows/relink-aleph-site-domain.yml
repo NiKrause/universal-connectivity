@@ -1,0 +1,125 @@
+name: Relink Aleph site domain
+
+on:
+  workflow_dispatch:
+    inputs:
+      aleph_domain:
+        description: Production domain to link
+        required: true
+        default: connect.nicokrause.com
+        type: string
+      site_ref:
+        description: Aleph STORE ref to publish for the site
+        required: true
+        default: connect.nicokrause.com
+        type: string
+      manifest_url:
+        description: Fresh uc-go-peer latest.json URL to bake into js-peer
+        required: true
+        default: https://QmSHhkpGuBp6GeX1UPEcN6NfghWx6uw43tF5w1V7Ns3ugD.ipfs.aleph.sh/rootfs/uc-go-peer/latest.json
+        type: string
+      shared_aleph_node_ref:
+        description: relay-button ref to checkout for shared @le-space/node source mode
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  relink-site:
+    runs-on: ubuntu-24.04
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      SHARED_ALEPH_NODE_SOURCE: source
+
+    steps:
+      - name: Checkout universal-connectivity
+        uses: actions/checkout@v5
+        with:
+          path: universal-connectivity
+
+      - name: Checkout relay-button shared tooling
+        uses: actions/checkout@v5
+        with:
+          repository: NiKrause/relay-button
+          ref: ${{ inputs.shared_aleph_node_ref }}
+          path: relay-button
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24.x'
+
+      - name: Install relay-button shared tooling
+        run: |
+          corepack enable
+          shared_package_manager="$(node -p "require(process.argv[1]).packageManager" "${{ github.workspace }}/relay-button/package.json")"
+          corepack prepare "${shared_package_manager}" --activate
+          pnpm --version
+          pnpm --dir "${{ github.workspace }}/relay-button" --filter @le-space/node... install --frozen-lockfile
+
+      - name: Fetch fresh uc-go-peer manifest
+        working-directory: universal-connectivity
+        env:
+          MANIFEST_URL: ${{ inputs.manifest_url }}
+        run: |
+          set -euo pipefail
+          mkdir -p js-peer/public/rootfs/uc-go-peer
+          curl -fsSL "${MANIFEST_URL}" -o js-peer/public/rootfs/uc-go-peer/latest.json
+          version="$(node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('js-peer/public/rootfs/uc-go-peer/latest.json','utf8')); if (!data.version) throw new Error('manifest version missing'); process.stdout.write(data.version)")"
+          cp js-peer/public/rootfs/uc-go-peer/latest.json "js-peer/public/rootfs/uc-go-peer/${version}.json"
+
+      - name: Build js-peer site
+        working-directory: universal-connectivity/js-peer
+        env:
+          NEXT_PUBLIC_ALEPH_DOMAIN: ${{ inputs.aleph_domain }}
+          NEXT_PUBLIC_VM_SSH_PUBLIC_KEY: ${{ secrets.VM_SSH_PUBLIC_KEY }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish js-peer site through shared runner
+        id: publish_site
+        env:
+          ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
+          ALEPH_VM_MODE: site-publish
+          ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
+          ALEPH_SITE_DIRECTORY: js-peer/out
+          ALEPH_SITE_REF: ${{ inputs.site_ref }}
+          ALEPH_SITE_RETENTION_KEEP_COUNT: '5'
+          SHARED_ALEPH_NODE_LOCAL_PATH: ${{ github.workspace }}/relay-button
+        run: |
+          workdir="$(mktemp -d)"
+          cd "$workdir"
+          node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
+
+      - name: Link production domain through shared runner
+        env:
+          ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
+          ALEPH_VM_MODE: site-domain-link
+          ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
+          ALEPH_SITE_DOMAIN: ${{ inputs.aleph_domain }}
+          ALEPH_SITE_ITEM_HASH: ${{ steps.publish_site.outputs.item_hash }}
+          SHARED_ALEPH_NODE_LOCAL_PATH: ${{ github.workspace }}/relay-button
+        run: |
+          if [[ -z "${{ steps.publish_site.outputs.item_hash }}" ]]; then
+            echo "publish_site.outputs.item_hash is missing after js-peer publish"
+            exit 1
+          fi
+          workdir="$(mktemp -d)"
+          cd "$workdir"
+          node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
+
+      - name: Summarize relink
+        run: |
+          {
+            echo "## Aleph Site Domain Relink"
+            echo
+            echo "- Domain: \`${{ inputs.aleph_domain }}\`"
+            echo "- Site ref: \`${{ inputs.site_ref }}\`"
+            echo "- Manifest URL: ${{ inputs.manifest_url }}"
+            echo "- Published site URL: ${{ steps.publish_site.outputs.url }}"
+            echo "- Site item hash: \`${{ steps.publish_site.outputs.item_hash }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
