@@ -2,7 +2,7 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.6.4
+  SHARED_ALEPH_NODE_VERSION: 0.6.5
   SHARED_ALEPH_NODE_SOURCE: source
 
 on:

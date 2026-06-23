@@ -138,7 +138,7 @@ inputs:
   shared_package_version:
     description: Published @le-space/node version to install for the shared deploy runner
     required: false
-    default: '0.6.4'
+    default: '0.6.5'
   shared_package_source:
     description: Use npm for the published package or source for a checked-out relay-button workspace
     required: false
