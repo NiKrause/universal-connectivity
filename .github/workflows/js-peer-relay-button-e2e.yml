@@ -1,0 +1,67 @@
+name: js-peer relay-button E2E
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: js-peer-relay-button-e2e
+  cancel-in-progress: false
+
+jobs:
+  relay-chat:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: js-peer
+    env:
+      RELAY_BUTTON_E2E_PRIVATE_KEY: ${{ secrets.RELAY_BUTTON_E2E_PRIVATE_KEY != '' && secrets.RELAY_BUTTON_E2E_PRIVATE_KEY || secrets.ALEPH_PRIVATE_KEY }}
+      RELAY_BUTTON_E2E_SSH_PUBLIC_KEY: ${{ secrets.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY != '' && secrets.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: js-peer/package-lock.json
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - name: Verify E2E credentials
+        run: |
+          test -n "$RELAY_BUTTON_E2E_PRIVATE_KEY" || { echo 'A relay-button or Aleph private key secret is required.' >&2; exit 1; }
+          test -n "$RELAY_BUTTON_E2E_SSH_PUBLIC_KEY" || { echo 'A relay-button or VM SSH public key secret is required.' >&2; exit 1; }
+
+      - name: Provision uc-go-peer and exchange chat messages in two browsers
+        run: npm run test:e2e:relay-button
+
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: js-peer-relay-button-e2e-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            js-peer/test-results/
+            js-peer/playwright-report/
+
+      - name: Summarize relay-button E2E
+        if: always()
+        run: |
+          {
+            echo '## js-peer relay-button E2E'
+            echo
+            echo '- Provision a fresh `uc-go-peer` through the React relay-button.'
+            echo '- Wait for its Aleph bootstrap registration and browser-reachable WSS addresses.'
+            echo '- Open two isolated browser contexts with ambient bootstrap discovery disabled.'
+            echo '- Dial the new peer through each browser’s existing `libp2p node info` custom multiaddress form.'
+            echo '- Verify chat delivery A → B and B → A through the new peer.'
+            echo '- Delete the temporary Aleph VM after the test.'
+          } >> "$GITHUB_STEP_SUMMARY"
