@@ -2,7 +2,7 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.6.24
+  SHARED_ALEPH_NODE_VERSION: 0.6.26
   SHARED_ALEPH_NODE_SOURCE: npm
 
 on:
@@ -415,6 +415,7 @@ jobs:
         id: protocol_probe
         env:
           ALEPH_VM_MODE: relay-probe
+          ALEPH_RELAY_PROFILE: uc-go-peer
           ALEPH_RELAY_PROBE_REQUIRED_FAMILIES_JSON: ${{ env.ALEPH_RELAY_PROBE_REQUIRED_FAMILIES_JSON }}
           ALEPH_RELAY_PROBE_BEST_EFFORT_FAMILIES_JSON: ${{ env.ALEPH_RELAY_PROBE_BEST_EFFORT_FAMILIES_JSON }}
           ALEPH_RELAY_PROBE_PROXY_WSS_HOST_MATCHERS_JSON: ${{ env.ALEPH_RELAY_PROBE_PROXY_WSS_HOST_MATCHERS_JSON }}
@@ -579,6 +580,7 @@ jobs:
           VM_VERIFICATION_JSON: ${{ steps.export_outputs.outputs.vm_verification_json }}
           VM_BROWSER_BOOTSTRAP_MULTIADDRS_JSON: ${{ steps.export_outputs.outputs.vm_browser_bootstrap_multiaddrs_json }}
           VM_PROTOCOL_PROBE_JSON: ${{ steps.export_outputs.outputs.vm_protocol_probe_json }}
+          VM_CERTHASH_VERIFICATION_JSON: ${{ steps.protocol_probe.outputs.certhash_verification_json }}
           RETENTION_RESULT_JSON: ${{ steps.export_outputs.outputs.retention_result_json }}
         run: |
           {
@@ -604,6 +606,7 @@ jobs:
             echo "- Publish to Aleph: \`${{ inputs.publish }}\`"
             echo "- Deploy VM after publish: \`${{ inputs.deploy_vm }}\`"
             echo "- Enable proxy-backed Caddy/WSS: \`${{ inputs.vm_enable_caddy_proxy }}\`"
+            echo "- WebTransport/WebRTC certhash verification: \`${{ steps.protocol_probe.outputs.certhash_verification_ok }}\`"
             echo "- Keep successful deployments: \`${{ inputs.retain_successful_deployments }}\`"
             echo "- Main service: \`${ROOTFS_SERVICE_MAIN}\`"
             echo "- Bootstrap service: \`${ROOTFS_SERVICE_BOOTSTRAP}\`"
@@ -670,7 +673,7 @@ jobs:
                 printf '%s\n' "${VM_BROWSER_BOOTSTRAP_MULTIADDRS_JSON}"
                 echo '```'
               fi
-              if [[ -n "${VM_PROTOCOL_PROBE_JSON}" ]]; then
+            if [[ -n "${VM_PROTOCOL_PROBE_JSON}" ]]; then
                 echo
                 echo "#### Relay Protocol Probe"
                 echo
@@ -686,6 +689,14 @@ jobs:
                 printf '%s\n' "${RETENTION_RESULT_JSON}"
                 echo '```'
               fi
+            fi
+            if [[ -n "${VM_CERTHASH_VERIFICATION_JSON}" ]]; then
+              echo
+              echo "#### Browser Transport Certhash Verification"
+              echo
+              echo '```json'
+              printf '%s\n' "${VM_CERTHASH_VERIFICATION_JSON}"
+              echo '```'
             fi
             if [[ -f dist-rootfs/rootfs-manifest.json ]]; then
               echo
