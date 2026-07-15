@@ -6,7 +6,8 @@ const PRIVATE_KEY = process.env.RELAY_BUTTON_E2E_PRIVATE_KEY?.trim()
 const SSH_PUBLIC_KEY = process.env.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY?.trim()
 const APP_URL = process.env.RELAY_BUTTON_E2E_APP_URL ?? 'http://127.0.0.1:4173'
 const OUTPUT_DIR = 'test-results/relay-button-chat'
-const PROVISION_TIMEOUT = 20 * 60_000
+const PROVISION_TIMEOUT = 32 * 60_000
+const REGISTRATION_VISIBILITY_TIMEOUT = 90_000
 const RELAY_READINESS_TIMEOUT = 8 * 60_000
 const CHAT_TIMEOUT = 3 * 60_000
 
@@ -107,9 +108,16 @@ async function waitForDeploymentInstance(page: Page, instanceName: string, owner
           element.textContent?.includes(expectedName) &&
           [...element.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Delete'),
       )
-      if (instance) return { status: 'instance' }
+      if (instance?.textContent?.includes('Aleph bootstrap registered')) return { status: 'instance' }
       const error = document.querySelector('aside.panel .alert.error')?.textContent?.trim()
       if (error) return { status: 'error', message: error }
+      const panelText = document.querySelector('aside')?.textContent ?? ''
+      const deployButton = [...document.querySelectorAll('button')].find((button) =>
+        button.textContent?.includes('Deploy'),
+      )
+      if (panelText.includes('Deployment failed') && !deployButton?.textContent?.includes('Deploying')) {
+        return { status: 'error', message: panelText }
+      }
       return null
     },
     instanceName,
@@ -164,7 +172,7 @@ async function waitForBootstrapRegistration(ownerAddress: string, instanceName: 
   const { DEFAULT_ALEPH_BOOTSTRAP_COMPACT_POST_TYPE, DEFAULT_ALEPH_BOOTSTRAP_POST_TYPE, fetchAlephBootstrapPosts } =
     await import('@le-space/aleph-bootstrap')
 
-  const deadline = Date.now() + PROVISION_TIMEOUT
+  const deadline = Date.now() + REGISTRATION_VISIBILITY_TIMEOUT
   let lastSummary = 'No bootstrap posts returned.'
 
   while (Date.now() < deadline) {

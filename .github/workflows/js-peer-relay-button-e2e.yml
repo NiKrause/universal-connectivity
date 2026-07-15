@@ -26,7 +26,7 @@ jobs:
   relay-chat:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 50
     defaults:
       run:
         working-directory: js-peer
