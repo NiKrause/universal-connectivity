@@ -67,11 +67,45 @@ async function installWalletProvider(context: BrowserContext, account: ReturnTyp
   })
 }
 
-async function waitForDeploymentInstance(page: Page, instanceName: string) {
+async function findAlephInstanceHash(ownerAddress: string, instanceName: string, startedAt: number) {
+  const deadline = Date.now() + 60_000
+  const apiHosts = ['https://api2.aleph.im', 'https://api.aleph.im']
+
+  while (Date.now() < deadline) {
+    for (const apiHost of apiHosts) {
+      try {
+        const url = new URL('/api/v0/messages.json', apiHost)
+        url.searchParams.set('msgTypes', 'INSTANCE')
+        url.searchParams.set('addresses', ownerAddress)
+        url.searchParams.set('message_statuses', 'processed,pending,rejected')
+        url.searchParams.set('pagination', '100')
+        url.searchParams.set('page', '1')
+        url.searchParams.set('sortOrder', '-1')
+        const response = await fetch(url, { cache: 'no-cache' })
+        if (!response.ok) continue
+        const payload = (await response.json()) as { messages?: Record<string, unknown>[] }
+        const instance = payload.messages?.find((message) => {
+          const content = message.content as { metadata?: { name?: string } } | undefined
+          const timestamp = Number(message.reception_time ?? message.time ?? 0) * 1000
+          return content?.metadata?.name === instanceName && timestamp >= startedAt - 60_000
+        })
+        if (typeof instance?.item_hash === 'string' && instance.item_hash) return instance.item_hash
+      } catch {
+        // Try the next Aleph API host until the deployment becomes queryable.
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000))
+  }
+  throw new Error(`Could not resolve the full Aleph instance hash for ${instanceName}`)
+}
+
+async function waitForDeploymentInstance(page: Page, instanceName: string, ownerAddress: string, startedAt: number) {
   const outcome = await page.waitForFunction(
     (expectedName) => {
-      const instance = [...document.querySelectorAll('details')].find((element) =>
-        element.textContent?.includes(expectedName),
+      const instance = [...document.querySelectorAll('details')].find(
+        (element) =>
+          element.textContent?.includes(expectedName) &&
+          [...element.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Delete'),
       )
       if (instance) return { status: 'instance' }
       const error = document.querySelector('aside.panel .alert.error')?.textContent?.trim()
@@ -84,10 +118,12 @@ async function waitForDeploymentInstance(page: Page, instanceName: string) {
   const result = await outcome.jsonValue()
   if (result?.status === 'error') throw new Error(`Relay Button deployment failed: ${result.message}`)
 
-  const instance = page.locator('details').filter({ hasText: instanceName }).first()
-  const apiHref = await instance.getByRole('link', { name: 'API', exact: true }).getAttribute('href')
-  const instanceHash = apiHref?.match(/\/messages\/([^/?#]+)/)?.[1]
-  if (!instanceHash) throw new Error(`Could not read Aleph instance hash for ${instanceName}`)
+  const instance = page
+    .locator('details')
+    .filter({ hasText: instanceName })
+    .filter({ has: page.getByRole('button', { name: 'Delete', exact: true }) })
+    .first()
+  const instanceHash = await findAlephInstanceHash(ownerAddress, instanceName, startedAt)
   return { instance, instanceHash }
 }
 
@@ -297,7 +333,11 @@ async function deleteProvisionedRelay(page: Page, instanceName: string) {
     .getByRole('button', { name: 'Refresh' })
     .click()
     .catch(() => {})
-  const instance = page.locator('details').filter({ hasText: instanceName }).first()
+  const instance = page
+    .locator('details')
+    .filter({ hasText: instanceName })
+    .filter({ has: page.getByRole('button', { name: 'Delete', exact: true }) })
+    .first()
   await instance.waitFor({ state: 'visible', timeout: 60_000 })
   await instance.getByRole('button', { name: 'Delete', exact: true }).click()
   await expect(instance).toBeHidden({ timeout: 3 * 60_000 })
@@ -363,9 +403,9 @@ test.describe('React Relay Button chat', () => {
       await expect(deployButton).toBeEnabled()
       pass('walletAndManifest')
       await deployButton.click()
-
-      const { instanceHash } = await waitForDeploymentInstance(deploymentPage, instanceName)
       deployed = true
+
+      const { instanceHash } = await waitForDeploymentInstance(deploymentPage, instanceName, account.address, startedAt)
       evidence.instanceHash = instanceHash
       pass('instanceProvisioned', instanceHash)
 
