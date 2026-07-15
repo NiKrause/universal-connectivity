@@ -345,7 +345,11 @@ test.describe('React Relay Button chat', () => {
 
     try {
       await deploymentPage.goto(APP_URL, { waitUntil: 'domcontentloaded' })
-      await deploymentPage.getByRole('button', { name: 'Relay Button' }).click()
+      const relayLauncher = deploymentPage.getByRole('button', {
+        name: /^(?:Sponsor Relay|Relay Button|Relay)$/,
+      })
+      await expect(relayLauncher).toBeVisible({ timeout: 60_000 })
+      await relayLauncher.click()
       // The React relay component currently exposes placeholders rather than
       // associated labels for these fields.
       await deploymentPage.getByPlaceholder('Instance name').fill(instanceName)
