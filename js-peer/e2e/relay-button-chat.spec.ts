@@ -158,7 +158,7 @@ async function waitForDeployableManifest(page: Page) {
   }
 }
 
-async function waitForBootstrapRegistration(ownerAddress: string, instanceHash: string, startedAt: number) {
+async function waitForBootstrapRegistration(ownerAddress: string, instanceName: string, startedAt: number) {
   // The package exposes an ESM-only entry point. Dynamic import keeps this
   // compatible with Playwright's CommonJS transform in this Next.js app.
   const { DEFAULT_ALEPH_BOOTSTRAP_COMPACT_POST_TYPE, DEFAULT_ALEPH_BOOTSTRAP_POST_TYPE, fetchAlephBootstrapPosts } =
@@ -185,13 +185,13 @@ async function waitForBootstrapRegistration(ownerAddress: string, instanceHash: 
       const addresses = candidate.browserMultiaddrs?.length ? candidate.browserMultiaddrs : candidate.multiaddrs
       return (
         owner === ownerAddress.toLowerCase() &&
-        candidate.registrationId?.includes(instanceHash) &&
+        candidate.registrationId?.includes(`:${instanceName}:`) &&
         Number(candidate.updatedAt ?? 0) >= startedAt - 60_000 &&
         (addresses?.length ?? 0) > 0
       )
     })
     if (registration) return registration
-    lastSummary = `${posts.length} posts checked; no current registration for ${instanceHash}`
+    lastSummary = `${posts.length} posts checked; no current registration for ${instanceName}`
     await new Promise((resolve) => setTimeout(resolve, 10_000))
   }
 
@@ -409,7 +409,7 @@ test.describe('React Relay Button chat', () => {
       evidence.instanceHash = instanceHash
       pass('instanceProvisioned', instanceHash)
 
-      const registration = await waitForBootstrapRegistration(account.address, instanceHash, startedAt)
+      const registration = await waitForBootstrapRegistration(account.address, instanceName, startedAt)
       const content = registration.content as BootstrapContent
       const relayPeerId = content.peerId
       if (!relayPeerId) throw new Error('Bootstrap registration did not include a peer ID')
