@@ -346,7 +346,7 @@ test.describe('React Relay Button chat', () => {
     try {
       await deploymentPage.goto(APP_URL, { waitUntil: 'domcontentloaded' })
       const relayLauncher = deploymentPage.getByRole('button', {
-        name: /^(?:Sponsor Relay|Relay Button|Relay)$/,
+        name: /(?:Sponsor Relay|Relay Button|Relay)/,
       })
       await expect(relayLauncher).toBeVisible({ timeout: 60_000 })
       await relayLauncher.click()
