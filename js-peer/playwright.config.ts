@@ -12,6 +12,9 @@ export default defineConfig({
     env: {
       NEXT_PUBLIC_E2E_RELAY_MODE: 'isolated',
       NEXT_PUBLIC_ALEPH_DOMAIN: 'connect.nicokrause.com',
+      NEXT_PUBLIC_ROOTFS_MANIFEST_URL:
+        process.env.RELAY_BUTTON_E2E_ROOTFS_MANIFEST_URL ??
+        'https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json',
     },
   },
   use: {

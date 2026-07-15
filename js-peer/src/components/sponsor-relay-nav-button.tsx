@@ -6,12 +6,15 @@ const SponsorRelayFab = dynamic(() => import('@le-space/ui/react').then((mod) =>
 })
 
 export default function SponsorRelayNavButton() {
+  const configuredManifestUrl = process.env.NEXT_PUBLIC_ROOTFS_MANIFEST_URL?.trim()
   const configuredAlephDomain = process.env.NEXT_PUBLIC_ALEPH_DOMAIN?.trim()
-  const manifestUrl = configuredAlephDomain
-    ? `https://${configuredAlephDomain}/rootfs/uc-go-peer/latest.json`
-    : typeof window !== 'undefined'
-      ? new URL('/rootfs/uc-go-peer/latest.json', window.location.origin).toString()
-      : '/rootfs/uc-go-peer/latest.json'
+  const manifestUrl =
+    configuredManifestUrl ||
+    (configuredAlephDomain
+      ? `https://${configuredAlephDomain}/rootfs/uc-go-peer/latest.json`
+      : typeof window !== 'undefined'
+        ? new URL('/rootfs/uc-go-peer/latest.json', window.location.origin).toString()
+        : '/rootfs/uc-go-peer/latest.json')
 
   return (
     <div

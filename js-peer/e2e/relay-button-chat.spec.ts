@@ -101,7 +101,13 @@ async function waitForDeployableManifest(page: Page) {
       if (!deployButton.disabled) return { status: 'ready' }
 
       const panelText = deployButton.closest('aside')?.textContent ?? document.body.textContent ?? ''
-      const terminalRootfsStates = ['manifest rootfs not deployable', 'manifest invalid', 'not found on Aleph']
+      const terminalRootfsStates = [
+        'manifest rootfs not deployable',
+        'manifest invalid',
+        'not found on Aleph',
+        'Rootfs unavailable — deployment blocked',
+        'Rejected by Aleph',
+      ]
       const rootfsFailure = terminalRootfsStates.find((state) => panelText.includes(state))
       return rootfsFailure ? { status: 'error', message: rootfsFailure } : null
     },

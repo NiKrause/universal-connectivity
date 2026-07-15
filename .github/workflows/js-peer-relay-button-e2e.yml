@@ -2,6 +2,11 @@ name: js-peer relay-button E2E
 
 on:
   workflow_dispatch:
+    inputs:
+      rootfs_manifest_url:
+        description: Rootfs manifest URL to validate and deploy
+        required: false
+        default: https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json
 
 permissions:
   contents: read
@@ -20,6 +25,7 @@ jobs:
     env:
       RELAY_BUTTON_E2E_PRIVATE_KEY: ${{ secrets.RELAY_BUTTON_E2E_PRIVATE_KEY != '' && secrets.RELAY_BUTTON_E2E_PRIVATE_KEY || secrets.ALEPH_PRIVATE_KEY }}
       RELAY_BUTTON_E2E_SSH_PUBLIC_KEY: ${{ secrets.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY != '' && secrets.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
+      RELAY_BUTTON_E2E_ROOTFS_MANIFEST_URL: ${{ inputs.rootfs_manifest_url }}
 
     steps:
       - uses: actions/checkout@v6
@@ -59,6 +65,7 @@ jobs:
             echo '## js-peer relay-button E2E'
             echo
             echo '- Provision a fresh `uc-go-peer` through the React relay-button.'
+            echo '- Validate and deploy rootfs manifest: `${{ inputs.rootfs_manifest_url }}`.'
             echo '- Wait for its Aleph bootstrap registration and browser-reachable WSS addresses.'
             echo '- Open two isolated browser contexts with ambient bootstrap discovery disabled.'
             echo '- Dial the new peer through each browser’s existing `libp2p node info` custom multiaddress form.'
