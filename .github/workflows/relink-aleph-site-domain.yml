@@ -78,6 +78,7 @@ jobs:
           NEXT_PUBLIC_VM_SSH_PUBLIC_KEY: ${{ secrets.VM_SSH_PUBLIC_KEY }}
         run: |
           npm ci
+          npm run bootstrap:resolve
           npm run build
 
       - name: Publish js-peer site through shared runner

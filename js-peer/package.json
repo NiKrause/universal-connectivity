@@ -4,6 +4,7 @@
     "dev": "next dev --experimental-https",
     "dev:e2e": "next dev --hostname 127.0.0.1 --port 4173",
     "build": "next build",
+    "bootstrap:resolve": "node scripts/resolve-aleph-bootstrap.mjs",
     "start": "next start",
     "test:e2e:relay-button": "playwright test e2e/relay-button-chat.spec.ts --project=chromium --workers=1",
     "format": "prettier --write src",

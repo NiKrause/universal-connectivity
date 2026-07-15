@@ -82,7 +82,7 @@ async function waitForDeploymentInstance(page: Page, instanceName: string) {
     { timeout: PROVISION_TIMEOUT, polling: 500 },
   )
   const result = await outcome.jsonValue()
-  if (result?.status === 'error') throw new Error(`Sponsor Relay deployment failed: ${result.message}`)
+  if (result?.status === 'error') throw new Error(`Relay Button deployment failed: ${result.message}`)
 
   const instance = page.locator('details').filter({ hasText: instanceName }).first()
   const apiHref = await instance.getByRole('link', { name: 'API', exact: true }).getAttribute('href')
@@ -117,7 +117,7 @@ async function waitForDeployableManifest(page: Page) {
   const result = await outcome.jsonValue()
   if (result?.status === 'error') {
     throw new Error(
-      `Sponsor Relay manifest is not deployable: ${result.message}. Republish the rootfs and update latest.json before provisioning.`,
+      `Relay Button manifest is not deployable: ${result.message}. Republish the rootfs and update latest.json before provisioning.`,
     )
   }
 }
@@ -303,7 +303,7 @@ async function deleteProvisionedRelay(page: Page, instanceName: string) {
   await expect(instance).toBeHidden({ timeout: 3 * 60_000 })
 }
 
-test.describe('React Sponsor Relay chat', () => {
+test.describe('React Relay Button chat', () => {
   test.skip(!PRIVATE_KEY, 'RELAY_BUTTON_E2E_PRIVATE_KEY is required to provision an Aleph relay')
   test.skip(!SSH_PUBLIC_KEY, 'RELAY_BUTTON_E2E_SSH_PUBLIC_KEY is required to provision an Aleph relay')
   test.setTimeout(30 * 60_000)
@@ -345,7 +345,7 @@ test.describe('React Sponsor Relay chat', () => {
 
     try {
       await deploymentPage.goto(APP_URL, { waitUntil: 'domcontentloaded' })
-      await deploymentPage.getByRole('button', { name: 'Sponsor Relay' }).click()
+      await deploymentPage.getByRole('button', { name: 'Relay Button' }).click()
       // The React relay component currently exposes placeholders rather than
       // associated labels for these fields.
       await deploymentPage.getByPlaceholder('Instance name').fill(instanceName)

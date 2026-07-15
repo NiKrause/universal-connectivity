@@ -1,6 +1,13 @@
 name: js-peer relay-button E2E
 
 on:
+  workflow_run:
+    workflows:
+      - Build uc-go-peer rootfs
+    types:
+      - completed
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       rootfs_manifest_url:
@@ -17,6 +24,7 @@ concurrency:
 
 jobs:
   relay-chat:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     defaults:
@@ -25,7 +33,7 @@ jobs:
     env:
       RELAY_BUTTON_E2E_PRIVATE_KEY: ${{ secrets.RELAY_BUTTON_E2E_PRIVATE_KEY != '' && secrets.RELAY_BUTTON_E2E_PRIVATE_KEY || secrets.ALEPH_PRIVATE_KEY }}
       RELAY_BUTTON_E2E_SSH_PUBLIC_KEY: ${{ secrets.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY != '' && secrets.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
-      RELAY_BUTTON_E2E_ROOTFS_MANIFEST_URL: ${{ inputs.rootfs_manifest_url }}
+      RELAY_BUTTON_E2E_ROOTFS_MANIFEST_URL: ${{ inputs.rootfs_manifest_url != '' && inputs.rootfs_manifest_url || 'https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json' }}
 
     steps:
       - uses: actions/checkout@v6

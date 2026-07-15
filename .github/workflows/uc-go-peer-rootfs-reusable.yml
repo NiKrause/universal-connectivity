@@ -354,64 +354,13 @@ jobs:
           fi
           node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runRootfsMode
 
-      - name: Build js-peer site with latest rootfs manifest
-        if: ${{ inputs.publish }}
-        env:
-          NEXT_PUBLIC_ALEPH_DOMAIN: ${{ vars.NEXT_PUBLIC_ALEPH_DOMAIN != '' && vars.NEXT_PUBLIC_ALEPH_DOMAIN || inputs.aleph_domain }}
-          NEXT_PUBLIC_VM_SSH_PUBLIC_KEY: ${{ vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY != '' && vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
-        working-directory: universal-connectivity/js-peer
-        run: |
-          npm ci
-          npm run build
-
-      - name: Publish js-peer site through shared runner
-        if: ${{ inputs.publish }}
-        id: deploy_site
-        env:
-          ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
-          ALEPH_VM_MODE: site-publish
-          ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
-          ALEPH_SITE_DIRECTORY: js-peer/out
-          ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
-          ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
-          ALEPH_SITE_REF: ${{ inputs.aleph_domain != '' && inputs.aleph_domain || 'uc-go-peer-prod' }}
-          ALEPH_SITE_RETENTION_KEEP_COUNT: '5'
-        run: |
-          workdir="$(mktemp -d)"
-          cd "$workdir"
-          if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
-            npm init -y >/dev/null 2>&1
-            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
-          fi
-          node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
-
-      - name: Link production domain through shared runner
-        if: ${{ inputs.publish && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
-        env:
-          ALEPH_VM_MODE: site-domain-link
-          ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
-          ALEPH_SITE_DOMAIN: ${{ inputs.aleph_domain }}
-          ALEPH_SITE_ITEM_HASH: ${{ steps.deploy_site.outputs.item_hash }}
-        run: |
-          if [[ -z "${{ steps.deploy_site.outputs.item_hash }}" ]]; then
-            echo "deploy_site.outputs.item_hash is missing after js-peer deployment"
-            exit 1
-          fi
-          workdir="$(mktemp -d)"
-          cd "$workdir"
-          if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
-            npm init -y >/dev/null 2>&1
-            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
-          fi
-          node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
-
       - name: Collect rootfs publish outputs
         id: collect_rootfs_outputs
         working-directory: universal-connectivity/go-peer/aleph
         run: |
           rootfs_cid='${{ steps.build_rootfs.outputs.rootfs_cid }}'
           rootfs_item_hash='${{ steps.build_rootfs.outputs.rootfs_item_hash }}'
-          site_url='${{ steps.deploy_site.outputs.url }}'
+          site_url=''
           manifest_latest_url=''
           manifest_versioned_url=''
 
@@ -482,8 +431,41 @@ jobs:
           fi
           node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
 
-      - name: Relink production domain through shared runner
-        if: ${{ inputs.publish && inputs.deploy_vm && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
+      - name: Build js-peer site with tested bootstrap snapshot
+        if: ${{ inputs.publish }}
+        env:
+          NEXT_PUBLIC_ALEPH_DOMAIN: ${{ vars.NEXT_PUBLIC_ALEPH_DOMAIN != '' && vars.NEXT_PUBLIC_ALEPH_DOMAIN || inputs.aleph_domain }}
+          NEXT_PUBLIC_VM_SSH_PUBLIC_KEY: ${{ vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY != '' && vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
+          RELAY_BOOTSTRAP_FALLBACK: ${{ steps.deploy_vm.outputs.browser_bootstrap_multiaddrs_json }}
+        working-directory: universal-connectivity/js-peer
+        run: |
+          npm ci
+          npm run bootstrap:resolve
+          npm run build
+
+      - name: Publish js-peer site through shared runner
+        if: ${{ inputs.publish }}
+        id: deploy_site
+        env:
+          ALEPH_PRIVATE_KEY: ${{ secrets.ALEPH_PRIVATE_KEY }}
+          ALEPH_VM_MODE: site-publish
+          ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
+          ALEPH_SITE_DIRECTORY: js-peer/out
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
+          ALEPH_SITE_ALEPH_MESSAGE_WAIT_DELAY_MS: '5000'
+          ALEPH_SITE_REF: ${{ inputs.aleph_domain != '' && inputs.aleph_domain || 'uc-go-peer-prod' }}
+          ALEPH_SITE_RETENTION_KEEP_COUNT: '5'
+        run: |
+          workdir="$(mktemp -d)"
+          cd "$workdir"
+          if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
+            npm init -y >/dev/null 2>&1
+            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+          fi
+          node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
+
+      - name: Link production domain through shared runner
+        if: ${{ inputs.publish && github.ref == 'refs/heads/main' && inputs.aleph_domain != '' }}
         env:
           ALEPH_VM_MODE: site-domain-link
           ALEPH_SITE_PROJECT_DIR: ${{ github.workspace }}/universal-connectivity
@@ -491,7 +473,7 @@ jobs:
           ALEPH_SITE_ITEM_HASH: ${{ steps.deploy_site.outputs.item_hash }}
         run: |
           if [[ -z "${{ steps.deploy_site.outputs.item_hash }}" ]]; then
-            echo "deploy_site.outputs.item_hash is missing after js-peer publish"
+            echo "deploy_site.outputs.item_hash is missing after js-peer deployment"
             exit 1
           fi
           workdir="$(mktemp -d)"
@@ -571,7 +553,7 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
         env:
-          initial_site_url: ${{ steps.collect_rootfs_outputs.outputs.site_url }}
+          initial_site_url: ${{ steps.deploy_site.outputs.url }}
           initial_manifest_latest_url: ${{ steps.collect_rootfs_outputs.outputs.manifest_latest_url }}
           initial_manifest_versioned_url: ${{ steps.collect_rootfs_outputs.outputs.manifest_versioned_url }}
           vm_instance_item_hash: ${{ steps.deploy_vm.outputs.instance_item_hash }}

@@ -129,7 +129,7 @@ For `go-peer`, that same key also seeds the libp2p identity file whenever the
 relay starts without an existing `identity.key`, so the resulting `peerId` and
 Aleph bootstrap publisher address stay aligned.
 
-For the browser Sponsor Relay path, the relay VM is now responsible for
+For the browser Relay Button path, the relay VM is now responsible for
 publishing its own Aleph bootstrap registration after configure. The browser
 waits for that guest-published registration instead of publishing bootstrap
 records with the wallet address as a mismatched sender.

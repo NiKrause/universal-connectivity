@@ -13,5 +13,19 @@ export const WEBTRANSPORT_BOOTSTRAP_PEER_ID = '12D3KooWFhXabKDwALpzqMbto94sB7rvm
 
 export const BOOTSTRAP_PEER_IDS = [WEBTRANSPORT_BOOTSTRAP_PEER_ID]
 
-// 👇 Workflow-baked browser bootstrap multiaddrs with explicit /p2p/<peerId>.
-export const BOOTSTRAP_MULTIADDRS: string[] = []
+// 👇 Workflow-baked, reachability-checked browser bootstrap multiaddrs.
+export const BOOTSTRAP_MULTIADDRS: string[] = parseBootstrapMultiaddrs(
+  process.env.NEXT_PUBLIC_RELAY_BOOTSTRAP_MULTIADDRS,
+)
+
+function parseBootstrapMultiaddrs(value: string | undefined): string[] {
+  if (!value?.trim()) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed)
+      ? [...new Set(parsed.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0))]
+      : []
+  } catch {
+    return []
+  }
+}
