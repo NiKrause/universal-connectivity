@@ -56,7 +56,7 @@ on:
       vm_placement_strategy:
         description: Placement mode when vm_crn_hash is empty; scheduler uses Aleph placement, manual iterates ranked CRNs
         required: false
-        default: scheduler
+        default: manual
         type: string
       vm_vcpus:
         description: Requested vCPU count for the uc-go-peer VM

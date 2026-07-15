@@ -48,7 +48,7 @@ on:
       vm_placement_strategy:
         description: Placement mode when no CRN hash is supplied; scheduler lets Aleph choose, manual iterates ranked CRNs
         required: false
-        default: scheduler
+        default: manual
         type: choice
         options:
           - scheduler
@@ -114,7 +114,7 @@ jobs:
       vm_name: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_name || 'uc-go-peer' }}
       vm_ssh_public_key: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_ssh_public_key || '' }}
       vm_crn_hash: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_crn_hash || github.event_name != 'workflow_dispatch' && vars.ALEPH_VM_CRN_HASH || '' }}
-      vm_placement_strategy: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_placement_strategy || 'scheduler' }}
+      vm_placement_strategy: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_placement_strategy || 'manual' }}
       vm_vcpus: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_vcpus || '1' }}
       vm_memory_mib: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_memory_mib || '1024' }}
       vm_rootfs_size_mib: ${{ github.event_name == 'workflow_dispatch' && inputs.vm_rootfs_size_mib || '20480' }}
