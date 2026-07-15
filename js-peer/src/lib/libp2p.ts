@@ -28,11 +28,16 @@ export async function startLibp2p(): Promise<Libp2pType> {
   const { webRTC, webRTCDirect } = await import('@libp2p/webrtc')
 
   const delegatedClient = createDelegatedRoutingV1HttpApiClient('https://delegated-ipfs.dev')
-  const discoveredBootstrapMultiaddrs = await discoverAlephBootstrapMultiaddrs().catch((error) => {
-    log.error('failed to load Aleph bootstrap multiaddrs: %o', error)
-    return []
-  })
-  const relayDialAddrStrings = [...new Set([...BOOTSTRAP_MULTIADDRS, ...discoveredBootstrapMultiaddrs])]
+  const isolatedRelayE2E = process.env.NEXT_PUBLIC_E2E_RELAY_MODE === 'isolated'
+  const discoveredBootstrapMultiaddrs = isolatedRelayE2E
+    ? []
+    : await discoverAlephBootstrapMultiaddrs().catch((error) => {
+        log.error('failed to load Aleph bootstrap multiaddrs: %o', error)
+        return []
+      })
+  const relayDialAddrStrings = isolatedRelayE2E
+    ? []
+    : [...new Set([...BOOTSTRAP_MULTIADDRS, ...discoveredBootstrapMultiaddrs])]
   log('starting libp2p with relayDialAddrs: %o', relayDialAddrStrings)
 
   let libp2p: Libp2pType
