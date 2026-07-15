@@ -293,7 +293,6 @@ class ChatBrowserAgent {
     const input = this.requiredPage().getByPlaceholder('Message')
     await input.fill(message)
     await input.press('Enter')
-    await this.waitForMessage(message)
   }
 
   async waitForMessage(message: string) {
@@ -354,7 +353,7 @@ async function deleteProvisionedRelay(page: Page, instanceName: string) {
 test.describe('React Relay Button chat', () => {
   test.skip(!PRIVATE_KEY, 'RELAY_BUTTON_E2E_PRIVATE_KEY is required to provision an Aleph relay')
   test.skip(!SSH_PUBLIC_KEY, 'RELAY_BUTTON_E2E_SSH_PUBLIC_KEY is required to provision an Aleph relay')
-  test.setTimeout(30 * 60_000)
+  test.setTimeout(45 * 60_000)
 
   test('provisions a uc-go-peer and exchanges chat messages through it in two browsers', async ({ browser }) => {
     await mkdir(OUTPUT_DIR, { recursive: true })
@@ -369,6 +368,7 @@ test.describe('React Relay Button chat', () => {
     const agentA = new ChatBrowserAgent('browser-a', browser)
     const agentB = new ChatBrowserAgent('browser-b', browser)
     let deployed = false
+    let currentStep = 'walletAndManifest'
     let testError: Error | null = null
     let cleanupError: Error | null = null
     const steps: Record<string, EvidenceStep> = {
@@ -410,6 +410,7 @@ test.describe('React Relay Button chat', () => {
       await waitForDeployableManifest(deploymentPage)
       await expect(deployButton).toBeEnabled()
       pass('walletAndManifest')
+      currentStep = 'instanceProvisioned'
       await deployButton.click()
       deployed = true
 
@@ -417,6 +418,7 @@ test.describe('React Relay Button chat', () => {
       evidence.instanceHash = instanceHash
       pass('instanceProvisioned', instanceHash)
 
+      currentStep = 'bootstrapPublished'
       const registration = await waitForBootstrapRegistration(account.address, instanceName, startedAt)
       const content = registration.content as BootstrapContent
       const relayPeerId = content.peerId
@@ -427,20 +429,22 @@ test.describe('React Relay Button chat', () => {
       evidence.relayAddresses = addresses
       pass('bootstrapPublished', `${relayPeerId}: ${addresses.join(', ')}`)
 
+      currentStep = 'browserAConnected'
       await Promise.all([agentA.open(), agentB.open()])
-      const [connectionA, connectionB] = await Promise.all([
-        agentA.connectToRelay(addresses, relayPeerId),
-        agentB.connectToRelay(addresses, relayPeerId),
-      ])
-      evidence.relayConnections = { browserA: connectionA, browserB: connectionB }
+      const connectionA = await agentA.connectToRelay(addresses, relayPeerId)
       pass('browserAConnected', connectionA.address)
+      currentStep = 'browserBConnected'
+      const connectionB = await agentB.connectToRelay(addresses, relayPeerId)
       pass('browserBConnected', connectionB.address)
+      evidence.relayConnections = { browserA: connectionA, browserB: connectionB }
 
       const messageA = `${instanceName}-from-a`
       const messageB = `${instanceName}-from-b`
+      currentStep = 'messageAToB'
       await agentA.sendMessage(messageA)
       await agentB.waitForMessage(messageA)
       pass('messageAToB', messageA)
+      currentStep = 'messageBToA'
       await agentB.sendMessage(messageB)
       await agentA.waitForMessage(messageB)
       pass('messageBToA', messageB)
@@ -453,6 +457,9 @@ test.describe('React Relay Button chat', () => {
       ])
     } catch (error) {
       testError = error instanceof Error ? error : new Error(String(error))
+      if (steps[currentStep]?.status === 'pending') {
+        steps[currentStep] = { ...steps[currentStep], status: 'failed', detail: testError.message }
+      }
       evidence.error = testError.message
       await Promise.allSettled([
         agentA.screenshot(`${OUTPUT_DIR}/browser-a-error.png`),

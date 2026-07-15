@@ -68,15 +68,4 @@ jobs:
 
       - name: Summarize relay-button E2E
         if: always()
-        run: |
-          {
-            echo '## js-peer relay-button E2E'
-            echo
-            echo '- Provision a fresh `uc-go-peer` through the React relay-button.'
-            echo '- Validate and deploy rootfs manifest: `${{ inputs.rootfs_manifest_url }}`.'
-            echo '- Wait for its Aleph bootstrap registration and browser-reachable WSS addresses.'
-            echo '- Open two isolated browser contexts with ambient bootstrap discovery disabled.'
-            echo '- Dial the new peer through each browser’s existing `libp2p node info` custom multiaddress form.'
-            echo '- Verify chat delivery A → B and B → A through the new peer.'
-            echo '- Delete the temporary Aleph VM after the test.'
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: node scripts/summarize-relay-button-e2e.mjs
