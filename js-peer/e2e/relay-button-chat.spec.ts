@@ -309,7 +309,10 @@ class ChatBrowserAgent {
   }
 
   async waitForMessage(message: string) {
-    await this.requiredPage().getByText(message, { exact: true }).waitFor({ state: 'visible', timeout: CHAT_TIMEOUT })
+    await this.requiredPage()
+      .getByTestId('chat-message-body')
+      .filter({ hasText: message })
+      .waitFor({ state: 'visible', timeout: CHAT_TIMEOUT })
   }
 
   async screenshot(path: string) {
