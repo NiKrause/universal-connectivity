@@ -169,23 +169,16 @@ async function waitForDeployableManifest(page: Page) {
 async function waitForBootstrapRegistration(ownerAddress: string, instanceName: string, startedAt: number) {
   // The package exposes an ESM-only entry point. Dynamic import keeps this
   // compatible with Playwright's CommonJS transform in this Next.js app.
-  const { DEFAULT_ALEPH_BOOTSTRAP_COMPACT_POST_TYPE, DEFAULT_ALEPH_BOOTSTRAP_POST_TYPE, fetchAlephBootstrapPosts } =
-    await import('@le-space/aleph-bootstrap')
+  const { fetchAlephBootstrapPosts } = await import('@le-space/aleph-bootstrap')
 
   const deadline = Date.now() + REGISTRATION_VISIBILITY_TIMEOUT
   let lastSummary = 'No bootstrap posts returned.'
 
   while (Date.now() < deadline) {
-    const posts = (
-      await Promise.all(
-        [DEFAULT_ALEPH_BOOTSTRAP_COMPACT_POST_TYPE, DEFAULT_ALEPH_BOOTSTRAP_POST_TYPE].map((postType) =>
-          fetchAlephBootstrapPosts({ pagination: 200, postType }),
-        ),
-      ).catch((error) => {
-        lastSummary = error instanceof Error ? error.message : String(error)
-        return []
-      })
-    ).flat()
+    const posts = await fetchAlephBootstrapPosts({ pagination: 200 }).catch((error) => {
+      lastSummary = error instanceof Error ? error.message : String(error)
+      return []
+    })
 
     const registration = posts.find(({ address, content }) => {
       const candidate = content as BootstrapContent
