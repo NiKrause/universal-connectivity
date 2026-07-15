@@ -31,7 +31,7 @@ on:
       aleph_api_hosts:
         description: Comma-, space-, or newline-separated Aleph API hosts to try in order for rootfs publishing and VM deployment
         required: false
-        default: 'https://api.aleph.im,https://api2.aleph.im,https://api3.aleph.im'
+        default: 'https://api2.aleph.im,https://api.aleph.im'
         type: string
       deploy_vm:
         description: Deploy a uc-go-peer VM from the published rootfs and verify reachability
@@ -322,6 +322,10 @@ jobs:
           ALEPH_ROOTFS_CONTRACT_PATH: ${{ env.ROOTFS_CONTRACT_FILE }}
           ALEPH_ROOTFS_VERSION: ${{ env.ROOTFS_VERSION }}
           ALEPH_ROOTFS_SKIP_UPLOAD: ${{ inputs.publish && 'false' || 'true' }}
+          ALEPH_ROOTFS_UPLOAD_DRIVER: aleph-api-ipfs
+          ALEPH_ROOTFS_REQUIRE_PROCESSED_STORE: 'true'
+          ALEPH_ROOTFS_IPFS_ADD_URLS: https://ipfs-2.aleph.im/api/v0/add,https://ipfs.aleph.cloud/api/v0/add
+          ALEPH_ROOTFS_IPFS_GATEWAY_URLS: https://ipfs-2.aleph.im/ipfs,https://ipfs.aleph.cloud/ipfs
           ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_ATTEMPTS: '180'
           ALEPH_ROOTFS_ALEPH_MESSAGE_WAIT_DELAY_SECONDS: '5'
           ALEPH_ROOTFS_DRIVER: docker
