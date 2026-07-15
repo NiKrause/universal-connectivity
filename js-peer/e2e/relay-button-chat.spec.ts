@@ -202,9 +202,29 @@ async function waitForBootstrapRegistration(ownerAddress: string, instanceName: 
 function selectBrowserRelayAddresses(content: BootstrapContent) {
   const addresses = content.browserMultiaddrs?.length ? content.browserMultiaddrs : (content.multiaddrs ?? [])
   return addresses
-    .filter((address) => /\/(tls\/ws|wss)\/p2p\//.test(address))
+    .filter((address) => {
+      if (/\/(tls\/ws|wss)\/p2p\//.test(address)) return true
+
+      // Browsers can dial WebTransport and WebRTC Direct addresses, but both
+      // transports must carry the certificate hash needed to authenticate the
+      // remote endpoint. Do not let an incomplete advertised address make the
+      // provisioning test look successful.
+      if (/\/webtransport\//.test(address)) {
+        return (address.match(/\/certhash\//g)?.length ?? 0) > 0 && /\/p2p\//.test(address)
+      }
+      if (/\/webrtc-direct\//.test(address)) {
+        return (address.match(/\/certhash\//g)?.length ?? 0) > 0 && /\/p2p\//.test(address)
+      }
+      return false
+    })
     .sort((left, right) => {
-      const rank = (address: string) => (address.includes('.libp2p.direct/') ? 0 : address.includes('.2n6.me/') ? 1 : 2)
+      const rank = (address: string) => {
+        if (address.includes('/webtransport/')) return 0
+        if (address.includes('/webrtc-direct/')) return 1
+        if (address.includes('.libp2p.direct/')) return 2
+        if (address.includes('.2n6.me/')) return 3
+        return 4
+      }
       return rank(left) - rank(right)
     })
 }
@@ -417,7 +437,10 @@ test.describe('React Relay Button chat', () => {
       const relayPeerId = content.peerId
       if (!relayPeerId) throw new Error('Bootstrap registration did not include a peer ID')
       const addresses = selectBrowserRelayAddresses(content)
-      expect(addresses, 'new uc-go-peer must advertise browser-reachable WSS').not.toHaveLength(0)
+      expect(
+        addresses,
+        'new uc-go-peer must advertise browser-dialable WebTransport, WebRTC Direct, or WSS',
+      ).not.toHaveLength(0)
       evidence.registration = registration
       evidence.relayAddresses = addresses
       pass('bootstrapPublished', `${relayPeerId}: ${addresses.join(', ')}`)
