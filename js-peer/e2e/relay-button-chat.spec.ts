@@ -10,6 +10,7 @@ const PROVISION_TIMEOUT = 32 * 60_000
 const REGISTRATION_VISIBILITY_TIMEOUT = 90_000
 const RELAY_READINESS_TIMEOUT = 8 * 60_000
 const CHAT_TIMEOUT = 3 * 60_000
+const DELETE_TIMEOUT = 5 * 60_000
 
 type EvidenceStep = { label: string; status: 'pending' | 'passed' | 'failed' | 'skipped'; detail?: string }
 type BootstrapContent = {
@@ -98,6 +99,50 @@ async function findAlephInstanceHash(ownerAddress: string, instanceName: string,
     await new Promise((resolve) => setTimeout(resolve, 2_000))
   }
   throw new Error(`Could not resolve the full Aleph instance hash for ${instanceName}`)
+}
+
+async function waitForAlephInstanceDeletion(instanceHash: string) {
+  const deadline = Date.now() + DELETE_TIMEOUT
+  const apiHosts = ['https://api2.aleph.im', 'https://api.aleph.im']
+  const schedulerUrl = `https://scheduler.api.aleph.cloud/api/v0/allocation/${instanceHash}`
+  let lastSummary = 'Deletion has not been observed yet.'
+
+  while (Date.now() < deadline) {
+    let forgotten = false
+    const observations: string[] = []
+
+    for (const apiHost of apiHosts) {
+      try {
+        const response = await fetch(new URL(`/api/v0/messages/${instanceHash}`, apiHost), { cache: 'no-cache' })
+        if (!response.ok) {
+          observations.push(`${apiHost}: HTTP ${response.status}`)
+          continue
+        }
+        const payload = (await response.json()) as { status?: string; forgotten_by?: string[] }
+        const hostForgotten = payload.status === 'forgotten' || Boolean(payload.forgotten_by?.length)
+        forgotten ||= hostForgotten
+        observations.push(`${apiHost}: ${payload.status ?? 'unknown'}`)
+      } catch (error) {
+        observations.push(`${apiHost}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+
+    let unallocated = false
+    try {
+      const response = await fetch(schedulerUrl, { cache: 'no-cache' })
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      unallocated = response.status === 404 || payload?.error === 'VM is not allocated to any node'
+      observations.push(`scheduler: ${unallocated ? 'unallocated' : `HTTP ${response.status}`}`)
+    } catch (error) {
+      observations.push(`scheduler: ${error instanceof Error ? error.message : String(error)}`)
+    }
+
+    if (forgotten && unallocated) return observations.join('; ')
+    lastSummary = observations.join('; ')
+    await new Promise((resolve) => setTimeout(resolve, 2_000))
+  }
+
+  throw new Error(`Aleph instance ${instanceHash} was not deleted within ${DELETE_TIMEOUT / 1000}s: ${lastSummary}`)
 }
 
 async function waitForDeploymentInstance(page: Page, instanceName: string, ownerAddress: string, startedAt: number) {
@@ -351,19 +396,21 @@ class ChatBrowserAgent {
   }
 }
 
-async function deleteProvisionedRelay(page: Page, instanceName: string) {
+async function deleteProvisionedRelay(page: Page, instanceName: string, instanceHash: string) {
   await page
     .getByRole('button', { name: 'Refresh' })
     .click()
     .catch(() => {})
-  const instance = page
-    .locator('details')
-    .filter({ hasText: instanceName })
-    .filter({ has: page.getByRole('button', { name: 'Delete', exact: true }) })
-    .first()
+  const instance = page.locator('details').filter({ hasText: instanceName }).first()
   await instance.waitFor({ state: 'visible', timeout: 60_000 })
   await instance.getByRole('button', { name: 'Delete', exact: true }).click()
-  await expect(instance).toBeHidden({ timeout: 3 * 60_000 })
+  const deletionSummary = await waitForAlephInstanceDeletion(instanceHash)
+  await page
+    .getByRole('button', { name: 'Refresh' })
+    .click()
+    .catch(() => {})
+  await expect(page.locator('details').filter({ hasText: instanceName })).toHaveCount(0, { timeout: 60_000 })
+  return deletionSummary
 }
 
 test.describe('React Relay Button chat', () => {
@@ -384,6 +431,7 @@ test.describe('React Relay Button chat', () => {
     const agentA = new ChatBrowserAgent('browser-a', browser)
     const agentB = new ChatBrowserAgent('browser-b', browser)
     let deployed = false
+    let instanceHash: string | null = null
     let currentStep = 'walletAndManifest'
     let testError: Error | null = null
     let cleanupError: Error | null = null
@@ -430,7 +478,8 @@ test.describe('React Relay Button chat', () => {
       await deployButton.click()
       deployed = true
 
-      const { instanceHash } = await waitForDeploymentInstance(deploymentPage, instanceName, account.address, startedAt)
+      const deployment = await waitForDeploymentInstance(deploymentPage, instanceName, account.address, startedAt)
+      instanceHash = deployment.instanceHash
       evidence.instanceHash = instanceHash
       pass('instanceProvisioned', instanceHash)
 
@@ -490,8 +539,10 @@ test.describe('React Relay Button chat', () => {
     await Promise.allSettled([agentA.close(), agentB.close()])
     if (deployed) {
       try {
-        await deleteProvisionedRelay(deploymentPage, instanceName)
-        pass('cleanup')
+        instanceHash ??= await findAlephInstanceHash(account.address, instanceName, startedAt)
+        evidence.instanceHash = instanceHash
+        const deletionSummary = await deleteProvisionedRelay(deploymentPage, instanceName, instanceHash)
+        pass('cleanup', deletionSummary)
       } catch (error) {
         cleanupError = error instanceof Error ? error : new Error(String(error))
         steps.cleanup = { ...steps.cleanup, status: 'failed', detail: cleanupError.message }
