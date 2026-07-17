@@ -18,6 +18,10 @@ on:
         description: Comma-separated Aleph instance hashes to erase and forget before the test
         required: false
         default: ""
+      testkit_ref:
+        description: relay-button ref containing the @le-space/playwright source pilot
+        required: false
+        default: main
 
 permissions:
   contents: read
@@ -39,9 +43,21 @@ jobs:
       RELAY_BUTTON_E2E_SSH_PUBLIC_KEY: ${{ secrets.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY != '' && secrets.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
       RELAY_BUTTON_E2E_ROOTFS_MANIFEST_URL: ${{ inputs.rootfs_manifest_url != '' && inputs.rootfs_manifest_url || 'https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json' }}
       RELAY_BUTTON_E2E_CLEANUP_INSTANCE_HASHES: ${{ inputs.cleanup_instance_hashes || '' }}
+      RELAY_BUTTON_TESTKIT_MODULE: ${{ github.workspace }}/js-peer/.relay-button-testkit/index.mjs
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Checkout shared Relay Button test kit
+        uses: actions/checkout@v6
+        with:
+          repository: NiKrause/relay-button
+          ref: ${{ inputs.testkit_ref != '' && inputs.testkit_ref || 'main' }}
+          path: .relay-button-testkit
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
 
       - uses: actions/setup-node@v6
         with:
@@ -51,6 +67,14 @@ jobs:
 
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+
+      - name: Build shared Playwright test kit from source
+        working-directory: ${{ github.workspace }}
+        run: |
+          pnpm --dir .relay-button-testkit install --frozen-lockfile --prefer-offline --filter @le-space/playwright...
+          pnpm --dir .relay-button-testkit --filter @le-space/playwright build:publish
+          mkdir -p js-peer/.relay-button-testkit
+          cp .relay-button-testkit/packages/playwright/dist/index.js js-peer/.relay-button-testkit/index.mjs
 
       - name: Verify E2E credentials
         run: |
