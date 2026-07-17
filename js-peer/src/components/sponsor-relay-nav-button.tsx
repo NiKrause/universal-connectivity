@@ -8,6 +8,12 @@ const SponsorRelayFab = dynamic(() => import('@le-space/ui/react').then((mod) =>
 export default function SponsorRelayNavButton() {
   const configuredManifestUrl = process.env.NEXT_PUBLIC_ROOTFS_MANIFEST_URL?.trim()
   const configuredAlephDomain = process.env.NEXT_PUBLIC_ALEPH_DOMAIN?.trim()
+  const configuredAlephApiHosts = process.env.NEXT_PUBLIC_ALEPH_API_HOSTS?.split(/[\s,]+/u)
+    .map((value) => value.trim())
+    .filter(Boolean)
+  const alephApiHosts = configuredAlephApiHosts?.length
+    ? configuredAlephApiHosts
+    : ['https://api2.aleph.im', 'https://api.aleph.im', 'https://api3.aleph.im']
   const manifestUrl =
     configuredManifestUrl ||
     (configuredAlephDomain
@@ -38,6 +44,7 @@ export default function SponsorRelayNavButton() {
     >
       <SponsorRelayFab
         manifestUrl={manifestUrl}
+        apiHosts={alephApiHosts}
         sshPublicKey={process.env.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY ?? ''}
         showInstances={true}
         instanceName="uc-relay"

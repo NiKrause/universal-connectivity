@@ -236,13 +236,7 @@ async function waitForDeploymentInstance(page: Page, instanceName: string, owner
 async function waitForDeployableManifest(page: Page) {
   const outcome = await page.waitForFunction(
     () => {
-      const deployButton = [...document.querySelectorAll('button')].find(
-        (button) => button.textContent?.trim() === 'Deploy Relay',
-      ) as HTMLButtonElement | undefined
-      if (!deployButton) return null
-      if (!deployButton.disabled) return { status: 'ready' }
-
-      const panelText = deployButton.closest('aside')?.textContent ?? document.body.textContent ?? ''
+      const panelText = document.querySelector('aside')?.textContent ?? document.body.textContent ?? ''
       const terminalRootfsStates = [
         'manifest rootfs not deployable',
         'manifest invalid',
@@ -251,7 +245,14 @@ async function waitForDeployableManifest(page: Page) {
         'Rejected by Aleph',
       ]
       const rootfsFailure = terminalRootfsStates.find((state) => panelText.includes(state))
-      return rootfsFailure ? { status: 'error', message: rootfsFailure } : null
+      if (rootfsFailure) return { status: 'error', message: rootfsFailure }
+
+      const deployButton = [...document.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === 'Deploy Relay',
+      ) as HTMLButtonElement | undefined
+      if (!deployButton) return null
+      if (!deployButton.disabled) return { status: 'ready' }
+      return null
     },
     undefined,
     { timeout: 120_000, polling: 500 },
