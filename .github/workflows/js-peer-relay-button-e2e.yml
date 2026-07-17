@@ -14,6 +14,10 @@ on:
         description: Rootfs manifest URL to validate and deploy
         required: false
         default: https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json
+      cleanup_instance_hashes:
+        description: Comma-separated Aleph instance hashes to erase and forget before the test
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -34,6 +38,7 @@ jobs:
       RELAY_BUTTON_E2E_PRIVATE_KEY: ${{ secrets.RELAY_BUTTON_E2E_PRIVATE_KEY != '' && secrets.RELAY_BUTTON_E2E_PRIVATE_KEY || secrets.ALEPH_PRIVATE_KEY }}
       RELAY_BUTTON_E2E_SSH_PUBLIC_KEY: ${{ secrets.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY != '' && secrets.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
       RELAY_BUTTON_E2E_ROOTFS_MANIFEST_URL: ${{ inputs.rootfs_manifest_url != '' && inputs.rootfs_manifest_url || 'https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json' }}
+      RELAY_BUTTON_E2E_CLEANUP_INSTANCE_HASHES: ${{ inputs.cleanup_instance_hashes || '' }}
 
     steps:
       - uses: actions/checkout@v6

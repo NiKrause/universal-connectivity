@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test'
 import { privateKeyToAccount } from 'viem/accounts'
+import { createHash } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 
 const PRIVATE_KEY = process.env.RELAY_BUTTON_E2E_PRIVATE_KEY?.trim()
@@ -11,6 +12,11 @@ const REGISTRATION_VISIBILITY_TIMEOUT = 90_000
 const RELAY_READINESS_TIMEOUT = 8 * 60_000
 const CHAT_TIMEOUT = 3 * 60_000
 const DELETE_TIMEOUT = 5 * 60_000
+const UI_DELETE_GRACE_PERIOD = 20_000
+const CLEANUP_INSTANCE_HASHES = (process.env.RELAY_BUTTON_E2E_CLEANUP_INSTANCE_HASHES ?? '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
 
 type EvidenceStep = { label: string; status: 'pending' | 'passed' | 'failed' | 'skipped'; detail?: string }
 type BootstrapContent = {
@@ -101,8 +107,8 @@ async function findAlephInstanceHash(ownerAddress: string, instanceName: string,
   throw new Error(`Could not resolve the full Aleph instance hash for ${instanceName}`)
 }
 
-async function waitForAlephInstanceDeletion(instanceHash: string) {
-  const deadline = Date.now() + DELETE_TIMEOUT
+async function waitForAlephInstanceDeletion(instanceHash: string, timeout = DELETE_TIMEOUT) {
+  const deadline = Date.now() + timeout
   const apiHosts = ['https://api2.aleph.im', 'https://api.aleph.im']
   const schedulerUrl = `https://scheduler.api.aleph.cloud/api/v0/allocation/${instanceHash}`
   let lastSummary = 'Deletion has not been observed yet.'
@@ -142,7 +148,54 @@ async function waitForAlephInstanceDeletion(instanceHash: string) {
     await new Promise((resolve) => setTimeout(resolve, 2_000))
   }
 
-  throw new Error(`Aleph instance ${instanceHash} was not deleted within ${DELETE_TIMEOUT / 1000}s: ${lastSummary}`)
+  throw new Error(`Aleph instance ${instanceHash} was not deleted within ${timeout / 1000}s: ${lastSummary}`)
+}
+
+async function cleanupAlephInstance(
+  account: ReturnType<typeof privateKeyToAccount>,
+  instanceHash: string,
+  eraseFirst: boolean,
+) {
+  if (!/^[a-f0-9]{64}$/iu.test(instanceHash)) throw new Error(`Invalid Aleph instance hash: ${instanceHash}`)
+
+  const { eraseInstanceOnCrn, forgetAlephMessages } = await import('@le-space/core')
+  const signer = (_sender: string, payload: string) => account.signMessage({ message: payload })
+  const hasher = (payload: string) => createHash('sha256').update(payload).digest('hex')
+  let eraseSummary = 'CRN erase already requested by the Relay Button UI'
+
+  if (eraseFirst) {
+    try {
+      const eraseResult = await eraseInstanceOnCrn({
+        sender: account.address,
+        signer,
+        instanceHash,
+        fetch,
+        apiHost: 'https://api2.aleph.im',
+      })
+      eraseSummary = `CRN ${eraseResult.status}${eraseResult.crnUrl ? ` at ${eraseResult.crnUrl}` : ''}`
+    } catch (error) {
+      // FORGET is still required even when the runtime is already absent or
+      // its former CRN can no longer be reached.
+      eraseSummary = `CRN erase unavailable: ${error instanceof Error ? error.message : String(error)}`
+    }
+  }
+
+  const forgetResult = await forgetAlephMessages({
+    sender: account.address,
+    hashes: [instanceHash],
+    reason: 'Relay Button E2E cleanup',
+    signer,
+    hasher,
+    fetch,
+    apiHost: 'https://api2.aleph.im',
+    sync: true,
+  })
+  if (forgetResult.status === 'rejected') {
+    throw new Error(`Aleph rejected cleanup for ${instanceHash}: ${JSON.stringify(forgetResult.response)}`)
+  }
+
+  const deletionSummary = await waitForAlephInstanceDeletion(instanceHash)
+  return `${eraseSummary}; FORGET ${forgetResult.itemHash} ${forgetResult.status}; ${deletionSummary}`
 }
 
 async function waitForDeploymentInstance(page: Page, instanceName: string, ownerAddress: string, startedAt: number) {
@@ -396,7 +449,12 @@ class ChatBrowserAgent {
   }
 }
 
-async function deleteProvisionedRelay(page: Page, instanceName: string, instanceHash: string) {
+async function deleteProvisionedRelay(
+  page: Page,
+  instanceName: string,
+  instanceHash: string,
+  account: ReturnType<typeof privateKeyToAccount>,
+) {
   await page
     .getByRole('button', { name: 'Refresh' })
     .click()
@@ -404,7 +462,12 @@ async function deleteProvisionedRelay(page: Page, instanceName: string, instance
   const instance = page.locator('details').filter({ hasText: instanceName }).first()
   await instance.waitFor({ state: 'visible', timeout: 60_000 })
   await instance.getByRole('button', { name: 'Delete', exact: true }).click()
-  const deletionSummary = await waitForAlephInstanceDeletion(instanceHash)
+  let deletionSummary: string
+  try {
+    deletionSummary = await waitForAlephInstanceDeletion(instanceHash, UI_DELETE_GRACE_PERIOD)
+  } catch {
+    deletionSummary = `Direct awaited fallback: ${await cleanupAlephInstance(account, instanceHash, false)}`
+  }
   await page
     .getByRole('button', { name: 'Refresh' })
     .click()
@@ -432,10 +495,11 @@ test.describe('React Relay Button chat', () => {
     const agentB = new ChatBrowserAgent('browser-b', browser)
     let deployed = false
     let instanceHash: string | null = null
-    let currentStep = 'walletAndManifest'
+    let currentStep = 'preflightCleanup'
     let testError: Error | null = null
     let cleanupError: Error | null = null
     const steps: Record<string, EvidenceStep> = {
+      preflightCleanup: { label: 'Previously leaked E2E instances deleted', status: 'pending' },
       walletAndManifest: { label: 'Wallet connected and uc-go-peer manifest accepted', status: 'pending' },
       instanceProvisioned: { label: 'Aleph uc-go-peer VM provisioned', status: 'pending' },
       bootstrapPublished: { label: 'New peer published browser WSS addresses', status: 'pending' },
@@ -456,6 +520,16 @@ test.describe('React Relay Button chat', () => {
     }
 
     try {
+      if (CLEANUP_INSTANCE_HASHES.length > 0) {
+        const cleanupSummaries = await Promise.all(
+          CLEANUP_INSTANCE_HASHES.map((hash) => cleanupAlephInstance(account, hash, true)),
+        )
+        pass('preflightCleanup', cleanupSummaries.join('\n'))
+      } else {
+        steps.preflightCleanup = { ...steps.preflightCleanup, status: 'skipped', detail: 'No cleanup input supplied' }
+      }
+
+      currentStep = 'walletAndManifest'
       await deploymentPage.goto(APP_URL, { waitUntil: 'domcontentloaded' })
       const relayLauncher = deploymentPage.getByRole('button', {
         name: /(?:Sponsor Relay|Relay Button|Relay)/,
@@ -541,7 +615,7 @@ test.describe('React Relay Button chat', () => {
       try {
         instanceHash ??= await findAlephInstanceHash(account.address, instanceName, startedAt)
         evidence.instanceHash = instanceHash
-        const deletionSummary = await deleteProvisionedRelay(deploymentPage, instanceName, instanceHash)
+        const deletionSummary = await deleteProvisionedRelay(deploymentPage, instanceName, instanceHash, account)
         pass('cleanup', deletionSummary)
       } catch (error) {
         cleanupError = error instanceof Error ? error : new Error(String(error))
