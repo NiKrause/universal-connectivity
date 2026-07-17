@@ -45,6 +45,8 @@ jobs:
         uses: aleph-im/web3-hosting-action@88fe843f95190f949c306b0d8da50c9889ee57fe
         with:
           path: js-peer/out
+          private-key: ${{ env.ALEPH_PRIVATE_KEY }}
+          retention_days: ${{ vars.ALEPH_RETENTION_DAYS }}
       - name: Deploy preview on Aleph for branch pushes
         id: deploy_branch
         if: github.event_name == 'push' && github.ref != 'refs/heads/main'
