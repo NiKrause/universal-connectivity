@@ -6,9 +6,8 @@ import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
 import { discoverAlephBootstrapMultiaddrs } from '@le-space/aleph-bootstrap'
 import { Multiaddr } from '@multiformats/multiaddr'
-import { sha256 } from 'multiformats/hashes/sha2'
 import { FaultTolerance } from '@libp2p/interface'
-import type { Connection, Message, SignedMessage, Libp2p } from '@libp2p/interface'
+import type { Connection, Libp2p } from '@libp2p/interface'
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { webSockets } from '@libp2p/websockets'
 import { webTransport } from '@libp2p/webtransport'
@@ -88,7 +87,9 @@ export async function startLibp2p(): Promise<Libp2pType> {
     services: {
       pubsub: gossipsub({
         allowPublishToZeroTopicPeers: true,
-        msgIdFn: msgIdFnStrictNoSign,
+        // Keep the StrictSign default message ID, which includes the sender's
+        // public key as well as its sequence number. Hashing only the sequence
+        // number makes messages from freshly started browser peers collide.
         ignoreDuplicatePublishError: true,
       }),
       // Keep delegated routing enabled for peer/content routing even though
@@ -126,17 +127,6 @@ export async function startLibp2p(): Promise<Libp2pType> {
   })
 
   return libp2p
-}
-
-// message IDs are used to dedupe inbound messages
-// every agent in network should use the same message id function
-// messages could be perceived as duplicate if this isnt added (as opposed to rust peer which has unique message ids)
-export async function msgIdFnStrictNoSign(msg: Message): Promise<Uint8Array> {
-  var enc = new TextEncoder()
-
-  const signedMessage = msg as SignedMessage
-  const encodedSeqNum = enc.encode(signedMessage.sequenceNumber.toString())
-  return await sha256.encode(encodedSeqNum)
 }
 
 // Function which dials one maddr at a time to avoid establishing multiple connections to the same peer
