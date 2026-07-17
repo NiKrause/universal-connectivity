@@ -9,6 +9,7 @@ const TESTKIT_MODULE = process.env.RELAY_BUTTON_TESTKIT_MODULE ?? '@le-space/pla
 const OUTPUT_DIR = 'test-results/relay-button-chat'
 const RELAY_READINESS_TIMEOUT = 8 * 60_000
 const CHAT_TIMEOUT = 3 * 60_000
+const CHAT_TOPIC = 'universal-connectivity'
 const CLEANUP_INSTANCE_HASHES = (process.env.RELAY_BUTTON_E2E_CLEANUP_INSTANCE_HASHES ?? '')
   .split(',')
   .map((value) => value.trim())
@@ -54,6 +55,16 @@ type RelayTestkit = {
     startedAt: number
     timeoutMs?: number
   }): Promise<string>
+  waitForPubsubSubscriber(
+    page: Page,
+    options: {
+      topic: string
+      peerId: string
+      timeoutMs?: number
+      pollIntervalMs?: number
+      stableForMs?: number
+    },
+  ): Promise<string[]>
   cleanupRelay(options: {
     page: Page
     account: WalletAccount
@@ -166,14 +177,24 @@ class ChatBrowserAgent {
     await this.page?.screenshot({ path, fullPage: true })
   }
 
+  pageForTestkit() {
+    return this.requiredPage()
+  }
+
   async diagnostics() {
-    return this.requiredPage().evaluate(() => {
+    return this.requiredPage().evaluate((topic) => {
       const node = (
         window as unknown as {
           libp2p: {
             peerId: unknown
             getMultiaddrs: () => unknown[]
             getConnections: () => { remotePeer: unknown; remoteAddr: unknown }[]
+            services: {
+              pubsub: {
+                getPeers: () => unknown[]
+                getSubscribers: (topic: string) => unknown[]
+              }
+            }
           }
         }
       ).libp2p
@@ -184,8 +205,12 @@ class ChatBrowserAgent {
           remotePeer: String(remotePeer),
           remoteAddr: String(remoteAddr),
         })),
+        pubsub: {
+          peers: node.services.pubsub.getPeers().map(String),
+          chatSubscribers: node.services.pubsub.getSubscribers(topic).map(String),
+        },
       }
-    })
+    }, CHAT_TOPIC)
   }
 
   async close() {
@@ -222,6 +247,7 @@ test.describe('React Relay Button chat', () => {
         bootstrapPublished: 'New peer published authenticated browser addresses',
         browserAConnected: 'Browser A connected to the new peer',
         browserBConnected: 'Browser B connected to the new peer',
+        pubsubReady: 'Both browsers joined the Relay PubSub topic',
         messageAToB: 'Public chat message travelled A → B',
         messageBToA: 'Public chat message travelled B → A',
         cleanup: 'Temporary Aleph INSTANCE forgotten and deallocated',
@@ -299,6 +325,24 @@ test.describe('React Relay Button chat', () => {
       pass('browserBConnected', connectionB.address)
       evidence.relayConnections = { browserA: connectionA, browserB: connectionB }
 
+      currentStep = 'pubsubReady'
+      const [subscribersA, subscribersB] = await Promise.all([
+        testkit.waitForPubsubSubscriber(agentA.pageForTestkit(), {
+          topic: CHAT_TOPIC,
+          peerId: relay.peerId,
+          timeoutMs: CHAT_TIMEOUT,
+          stableForMs: 2_000,
+        }),
+        testkit.waitForPubsubSubscriber(agentB.pageForTestkit(), {
+          topic: CHAT_TOPIC,
+          peerId: relay.peerId,
+          timeoutMs: CHAT_TIMEOUT,
+          stableForMs: 2_000,
+        }),
+      ])
+      evidence.pubsubReadiness = { browserA: subscribersA, browserB: subscribersB }
+      pass('pubsubReady', `${relay.peerId} stable on ${CHAT_TOPIC} in both browsers`)
+
       const messageA = `${instanceName}-from-a`
       const messageB = `${instanceName}-from-b`
       currentStep = 'messageAToB'
@@ -322,6 +366,17 @@ test.describe('React Relay Button chat', () => {
         testkit.updateRelayEvidenceStep(evidence, currentStep, 'failed', testError.message)
       }
       evidence.error = testError.message
+      const failureDiagnostics = await Promise.allSettled([agentA.diagnostics(), agentB.diagnostics()])
+      evidence.failureDiagnostics = {
+        browserA:
+          failureDiagnostics[0].status === 'fulfilled'
+            ? failureDiagnostics[0].value
+            : { error: String(failureDiagnostics[0].reason) },
+        browserB:
+          failureDiagnostics[1].status === 'fulfilled'
+            ? failureDiagnostics[1].value
+            : { error: String(failureDiagnostics[1].reason) },
+      }
       await Promise.allSettled([
         agentA.screenshot(`${OUTPUT_DIR}/browser-a-error.png`),
         agentB.screenshot(`${OUTPUT_DIR}/browser-b-error.png`),

@@ -43,7 +43,7 @@ jobs:
       RELAY_BUTTON_E2E_SSH_PUBLIC_KEY: ${{ secrets.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY != '' && secrets.RELAY_BUTTON_E2E_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
       RELAY_BUTTON_E2E_ROOTFS_MANIFEST_URL: ${{ inputs.rootfs_manifest_url != '' && inputs.rootfs_manifest_url || 'https://connect.nicokrause.com/rootfs/uc-go-peer/latest.json' }}
       RELAY_BUTTON_E2E_CLEANUP_INSTANCE_HASHES: ${{ inputs.cleanup_instance_hashes || '' }}
-      RELAY_BUTTON_TESTKIT_MODULE: ${{ github.workspace }}/.relay-button-testkit/packages/playwright/dist/index.js
+      RELAY_BUTTON_TESTKIT_MODULE: ${{ github.workspace }}/js-peer/.relay-button-testkit/index.mjs
 
     steps:
       - uses: actions/checkout@v6
@@ -73,6 +73,8 @@ jobs:
         run: |
           pnpm --dir .relay-button-testkit install --frozen-lockfile --prefer-offline --filter @le-space/playwright...
           pnpm --dir .relay-button-testkit --filter @le-space/playwright build:publish
+          mkdir -p js-peer/.relay-button-testkit
+          cp .relay-button-testkit/packages/playwright/dist/index.js js-peer/.relay-button-testkit/index.mjs
 
       - name: Verify E2E credentials
         run: |
