@@ -39,26 +39,24 @@ jobs:
         run: npm run bootstrap:resolve
       - run: npm run lint
       - run: npm run build
-      - name: Deploy preview on Aleph for PRs
+      - name: Deploy preview through shared @le-space site publisher
         id: deploy
         if: github.event_name == 'pull_request'
-        uses: aleph-im/web3-hosting-action@88fe843f95190f949c306b0d8da50c9889ee57fe
+        uses: NiKrause/relay-button/.github/actions/aleph-site-publish@9172bc8b924e10b5f7bd5b91cde5943ac8ace531
         with:
-          path: js-peer/out
-      - name: Deploy preview on Aleph for branch pushes
-        id: deploy_branch
-        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
-        uses: aleph-im/web3-hosting-action@88fe843f95190f949c306b0d8da50c9889ee57fe
-        with:
-          path: js-peer/out
-          private-key: ${{ env.ALEPH_PRIVATE_KEY }}
-          retention_days: ${{ vars.ALEPH_RETENTION_DAYS }}
+          directory: js-peer/out
+          project_dir: ${{ github.workspace }}
+          aleph_private_key: ${{ env.ALEPH_PRIVATE_KEY }}
+          site_ref: universal-connectivity-pr-${{ github.event.pull_request.number }}
+          retention_keep_count: '1'
       - name: Summarize Aleph preview deployment
-        if: (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref != 'refs/heads/main')
+        if: github.event_name == 'pull_request'
         env:
-          ACTION_URL: ${{ steps.deploy.outputs.url || steps.deploy_branch.outputs.url }}
-          ACTION_CID: ${{ steps.deploy.outputs.cid || steps.deploy_branch.outputs.cid }}
-          ACTION_VERSION: ${{ steps.deploy.outputs.version || steps.deploy_branch.outputs.version }}
+          ACTION_URL: ${{ steps.deploy.outputs.url }}
+          ACTION_CID: ${{ steps.deploy.outputs.ipfs_cid }}
+          ACTION_ITEM_HASH: ${{ steps.deploy.outputs.item_hash }}
+          ACTION_STORE_STATUS: ${{ steps.deploy.outputs.store_status }}
+          ACTION_API_HOST: ${{ steps.deploy.outputs.aleph_api_host }}
         run: |
           {
             echo '## Aleph Preview Deployment'
@@ -69,10 +67,16 @@ jobs:
             if [[ -n "${ACTION_CID:-}" ]]; then
               echo "- CID: ${ACTION_CID}"
             fi
-            if [[ -n "${ACTION_VERSION:-}" ]]; then
-              echo "- Version: ${ACTION_VERSION}"
+            if [[ -n "${ACTION_ITEM_HASH:-}" ]]; then
+              echo "- STORE item hash: \`${ACTION_ITEM_HASH}\`"
             fi
-            if [[ -z "${ACTION_URL:-}${ACTION_CID:-}${ACTION_VERSION:-}" ]]; then
+            if [[ -n "${ACTION_STORE_STATUS:-}" ]]; then
+              echo "- STORE status: \`${ACTION_STORE_STATUS}\`"
+            fi
+            if [[ -n "${ACTION_API_HOST:-}" ]]; then
+              echo "- Aleph API host: \`${ACTION_API_HOST}\`"
+            fi
+            if [[ -z "${ACTION_URL:-}${ACTION_CID:-}${ACTION_ITEM_HASH:-}" ]]; then
               echo '- Preview deployment finished, but no URL/CID output was exposed by the action.'
             fi
           } >> "$GITHUB_STEP_SUMMARY"

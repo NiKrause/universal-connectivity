@@ -5,15 +5,23 @@ const SponsorRelayFab = dynamic(() => import('@le-space/ui/react').then((mod) =>
   ssr: false,
 })
 
+function isUnsupportedAlephApiHost(value: string) {
+  try {
+    return new URL(value).hostname.toLowerCase() === 'api3.aleph.im'
+  } catch {
+    return false
+  }
+}
+
 export default function SponsorRelayNavButton() {
   const configuredManifestUrl = process.env.NEXT_PUBLIC_ROOTFS_MANIFEST_URL?.trim()
   const configuredAlephDomain = process.env.NEXT_PUBLIC_ALEPH_DOMAIN?.trim()
   const configuredAlephApiHosts = process.env.NEXT_PUBLIC_ALEPH_API_HOSTS?.split(/[\s,]+/u)
     .map((value) => value.trim())
-    .filter(Boolean)
+    .filter((value) => value && !isUnsupportedAlephApiHost(value))
   const alephApiHosts = configuredAlephApiHosts?.length
     ? configuredAlephApiHosts
-    : ['https://api2.aleph.im', 'https://api.aleph.im', 'https://api3.aleph.im']
+    : ['https://api2.aleph.im', 'https://api.aleph.im']
   const manifestUrl =
     configuredManifestUrl ||
     (configuredAlephDomain
