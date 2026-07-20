@@ -1,0 +1,140 @@
+name: js-peer remote replication
+
+# Cross-network replication test (mirror of simple-todo's remote-replication):
+# browser A on the runner + browser B on an ephemeral Aleph Playwright-runner VM,
+# both loading the DEPLOYED js-peer app and replicating a chat message through its
+# own relays. Kept separate from the relay-button provisioning E2E.
+#
+# Phase B: the VM is provisioned by the shared relay-button composite action with
+# the dedicated playwright-runner RootFS (no per-repo runner scripts). Runs after
+# a successful js-peer deploy, or on demand.
+
+on:
+  workflow_run:
+    workflows:
+      - js-peer build
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: Deployed js-peer URL both browsers load
+        required: false
+        default: https://connect.nicokrause.com
+      rootfs_item_hash:
+        description: Playwright-runner RootFS STORE item hash (built by relay-button)
+        required: false
+        default: c392fba3a392a9daa88a44620e0b0f4e5a260ccc3b56853eda8ed02009d8d4f1
+      testkit_ref:
+        description: relay-button ref for the @le-space/playwright testkit + runner action
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: js-peer-remote-replication
+  cancel-in-progress: false
+
+jobs:
+  remote-replication:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      RELAY_BUTTON_E2E_APP_URL: ${{ inputs.app_url != '' && inputs.app_url || 'https://connect.nicokrause.com' }}
+      # Reused across the relay-button E2E; Phase B needs the owner key + an SSH key.
+      ALEPH_VM_PRIVATE_KEY: ${{ secrets.RELAY_BUTTON_E2E_PRIVATE_KEY != '' && secrets.RELAY_BUTTON_E2E_PRIVATE_KEY || secrets.ALEPH_PRIVATE_KEY }}
+      RELAY_BUTTON_TESTKIT_MODULE: ${{ github.workspace }}/js-peer/.relay-button-testkit/index.mjs
+    steps:
+      - uses: actions/checkout@v6
+
+      # The relay-button composite action resolves its Node deps from a checkout
+      # at the workspace root (lesson from simple-todo's Phase B migration).
+      - name: Checkout relay-button (testkit + runner action)
+        uses: actions/checkout@v6
+        with:
+          repository: NiKrause/relay-button
+          ref: ${{ inputs.testkit_ref != '' && inputs.testkit_ref || 'main' }}
+          path: relay-button
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: js-peer/package-lock.json
+
+      - name: Install js-peer deps
+        working-directory: js-peer
+        run: npm ci
+
+      - name: Install local Chromium (browser A)
+        working-directory: js-peer
+        run: npx playwright install --with-deps chromium
+
+      - name: Build shared Playwright test kit from source
+        run: |
+          pnpm --dir relay-button install --frozen-lockfile --prefer-offline --filter @le-space/playwright...
+          pnpm --dir relay-button --filter @le-space/playwright build:publish
+          mkdir -p js-peer/.relay-button-testkit
+          cp relay-button/packages/playwright/dist/index.js js-peer/.relay-button-testkit/index.mjs
+          cp relay-button/packages/playwright/dist/chunk-*.js js-peer/.relay-button-testkit/ 2>/dev/null || true
+          printf '{"type":"module"}\n' > js-peer/.relay-button-testkit/package.json
+
+      - name: Verify credentials
+        run: |
+          test -n "$ALEPH_VM_PRIVATE_KEY" || { echo 'An Aleph owner private key secret is required.' >&2; exit 1; }
+
+      - name: Create per-run SSH identity and browser secret
+        id: credentials
+        run: |
+          secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$secret"
+          echo "secret=$secret" >> "$GITHUB_OUTPUT"
+          ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/aleph-playwright-id"
+          echo "ssh_public_key=$(cat "$RUNNER_TEMP/aleph-playwright-id.pub")" >> "$GITHUB_OUTPUT"
+
+      - name: Provision Aleph Playwright-runner VM (browser B)
+        id: runner
+        uses: NiKrause/relay-button/.github/actions/aleph-playwright-runner@main
+        with:
+          aleph_private_key: ${{ env.ALEPH_VM_PRIVATE_KEY }}
+          rootfs_item_hash: ${{ inputs.rootfs_item_hash != '' && inputs.rootfs_item_hash || 'c392fba3a392a9daa88a44620e0b0f4e5a260ccc3b56853eda8ed02009d8d4f1' }}
+          name: js-peer-remote-${{ github.run_id }}-${{ github.run_attempt }}
+          ssh_public_key: ${{ steps.credentials.outputs.ssh_public_key }}
+          ssh_private_key_path: ${{ runner.temp }}/aleph-playwright-id
+          secret: ${{ steps.credentials.outputs.secret }}
+
+      - name: Run cross-network remote replication
+        working-directory: js-peer
+        env:
+          ALEPH_PLAYWRIGHT_WS_ENDPOINT: ${{ steps.runner.outputs.ws_endpoint }}
+          ALEPH_PLAYWRIGHT_VERSION_URL: ${{ steps.runner.outputs.version_url }}
+          ALEPH_PLAYWRIGHT_SECRET: ${{ steps.credentials.outputs.secret }}
+          NODE_EXTRA_CA_CERTS: ${{ steps.runner.outputs.ca_cert_path }}
+        run: npm run test:e2e:remote-replication
+
+      - name: Erase and forget the runner VM
+        if: always()
+        uses: NiKrause/relay-button/.github/actions/aleph-playwright-runner-cleanup@main
+        with:
+          aleph_private_key: ${{ env.ALEPH_VM_PRIVATE_KEY }}
+          instance_item_hash: ${{ steps.runner.outputs.instance_item_hash }}
+
+      - name: Upload remote replication evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: js-peer-remote-replication-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            js-peer/test-results/
+            js-peer/playwright-report/
