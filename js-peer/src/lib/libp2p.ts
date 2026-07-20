@@ -30,7 +30,12 @@ export async function startLibp2p(): Promise<Libp2pType> {
   const isolatedRelayE2E = process.env.NEXT_PUBLIC_E2E_RELAY_MODE === 'isolated'
   const discoveredBootstrapMultiaddrs = isolatedRelayE2E
     ? []
-    : await discoverAlephBootstrapMultiaddrs().catch((error) => {
+    : await discoverAlephBootstrapMultiaddrs({
+        // The Aleph bootstrap channel is shared with simple-todo's
+        // `orbitdb-relay`; scope to our own profile so browsers only dial
+        // uc-go-peer relays (a foreign relay yields no shared circuit).
+        profile: process.env.NEXT_PUBLIC_RELAY_BOOTSTRAP_PROFILE || 'uc-go-peer',
+      }).catch((error) => {
         log.error('failed to load Aleph bootstrap multiaddrs: %o', error)
         return []
       })

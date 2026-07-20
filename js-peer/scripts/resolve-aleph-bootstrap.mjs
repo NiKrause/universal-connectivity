@@ -63,8 +63,14 @@ async function probeAddress(address) {
   }
 }
 
+// The Aleph bootstrap channel is shared with simple-todo's `orbitdb-relay`;
+// scope discovery to our own profile so we never bake in a foreign relay that
+// browsers cannot form a shared circuit through.
+const profile = process.env.RELAY_BOOTSTRAP_PROFILE?.trim() || 'uc-go-peer'
 const discovered =
-  override.length > 0 ? override : await discoverAlephBootstrapMultiaddrs({ browserDialableOnly: true })
+  override.length > 0
+    ? override
+    : await discoverAlephBootstrapMultiaddrs({ browserDialableOnly: true, profile })
 const candidates = [...new Set([...discovered, ...fallback])]
 
 if (candidates.length === 0) {
