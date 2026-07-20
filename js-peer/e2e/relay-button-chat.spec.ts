@@ -86,6 +86,19 @@ type RelayTestkit = {
   }): RelayEvidence
   updateRelayEvidenceStep(evidence: RelayEvidence, step: string, status: EvidenceStatus, detail?: string): void
   writeRelayEvidence(path: string, evidence: RelayEvidence): Promise<void>
+  createProgressLogger(options?: { label?: string; log?: (line: string) => void }): {
+    progress(message: string): void
+    stage(name: string, detail?: string): void
+  }
+  forwardBrowserConsole(
+    page: Page,
+    options: {
+      label: string
+      log?: (line: string) => void
+      filter?: RegExp | ((text: string) => boolean) | null
+      maxLength?: number
+    },
+  ): void
 }
 
 let testkitPromise: Promise<RelayTestkit> | undefined
@@ -102,11 +115,15 @@ class ChatBrowserAgent {
   constructor(
     readonly name: string,
     readonly browser: Browser,
+    readonly testkit: RelayTestkit,
   ) {}
 
   async open() {
     this.context = await this.browser.newContext()
     this.page = await this.context.newPage()
+    // Stream this browser's libp2p console activity into the test log so the run
+    // is diagnosable instead of silent for minutes.
+    this.testkit.forwardBrowserConsole(this.page, { label: this.name })
     await this.page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 120_000 })
     await this.page.getByPlaceholder('Message').waitFor({ state: 'visible', timeout: 120_000 })
     await this.page.waitForFunction(
@@ -256,14 +273,18 @@ test.describe('React Relay Button chat', () => {
     const deploymentContext = await browser.newContext()
     await testkit.installEip1193WalletMock(deploymentContext, account)
     const deploymentPage = await deploymentContext.newPage()
-    const agentA = new ChatBrowserAgent('browser-a', browser)
-    const agentB = new ChatBrowserAgent('browser-b', browser)
+    const progress = testkit.createProgressLogger({ label: 'relay-chat' })
+    const agentA = new ChatBrowserAgent('browser-a', browser, testkit)
+    const agentB = new ChatBrowserAgent('browser-b', browser, testkit)
     let deploymentSubmitted = false
     let instanceHash: string | null = null
     let currentStep = 'preflightCleanup'
     let testError: Error | null = null
     let cleanupError: Error | null = null
-    const pass = (step: string, detail = '') => testkit.updateRelayEvidenceStep(evidence, step, 'passed', detail)
+    const pass = (step: string, detail = '') => {
+      progress.stage(step, detail || undefined)
+      testkit.updateRelayEvidenceStep(evidence, step, 'passed', detail)
+    }
 
     try {
       if (CLEANUP_INSTANCE_HASHES.length > 0) {
@@ -289,6 +310,7 @@ test.describe('React Relay Button chat', () => {
       }
 
       currentStep = 'walletAndManifest'
+      progress.stage('provisioning', `${instanceName} via ${APP_URL}`)
       await deploymentPage.goto(APP_URL, { waitUntil: 'domcontentloaded' })
       const relay = await testkit.provisionRelay(deploymentPage, {
         accountAddress: account.address,
@@ -317,7 +339,9 @@ test.describe('React Relay Button chat', () => {
       evidence.relayAddresses = relay.addresses
 
       currentStep = 'browserAConnected'
+      progress.stage('opening-browsers', `both loading ${APP_URL}`)
       await Promise.all([agentA.open(), agentB.open()])
+      progress.stage('connecting-relay', `${relay.peerId} via ${relay.addresses.length} address(es)`)
       const connectionA = await agentA.connectToRelay(relay.addresses, relay.peerId)
       pass('browserAConnected', connectionA.address)
       currentStep = 'browserBConnected'
