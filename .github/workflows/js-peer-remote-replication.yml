@@ -112,7 +112,9 @@ jobs:
         with:
           aleph_private_key: ${{ env.ALEPH_VM_PRIVATE_KEY }}
           rootfs_item_hash: ${{ inputs.rootfs_item_hash != '' && inputs.rootfs_item_hash || 'c392fba3a392a9daa88a44620e0b0f4e5a260ccc3b56853eda8ed02009d8d4f1' }}
-          name: js-peer-remote-${{ github.run_id }}-${{ github.run_attempt }}
+          # Prefix must match the janitor's `playwright-<repo>-` scope so leaked
+          # VMs are caught by js-peer-aleph-playwright-janitor.yml.
+          name: playwright-nikrause-universal-connectivity-${{ github.run_id }}-${{ github.run_attempt }}
           ssh_public_key: ${{ steps.credentials.outputs.ssh_public_key }}
           ssh_private_key_path: ${{ runner.temp }}/aleph-playwright-id
           secret: ${{ steps.credentials.outputs.secret }}

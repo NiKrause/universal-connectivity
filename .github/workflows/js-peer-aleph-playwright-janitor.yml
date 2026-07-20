@@ -1,0 +1,23 @@
+name: js-peer Aleph Playwright runner janitor
+
+# Backstop for leaked ephemeral Aleph VMs from the js-peer E2E tests (remote
+# replication + relay-button chat). UC had no janitor, so any in-test cleanup
+# failure leaked a VM permanently. Reuses the shared relay-button janitor
+# workflow — no per-repo cleanup logic.
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    uses: NiKrause/relay-button/.github/workflows/playwright-runner-janitor.yml@main
+    with:
+      repository_scope: NiKrause/universal-connectivity
+      ttl_ms: 3600000
+    secrets:
+      ALEPH_PRIVATE_KEY: ${{ secrets.RELAY_BUTTON_E2E_PRIVATE_KEY || secrets.ALEPH_PRIVATE_KEY }}
