@@ -68,9 +68,7 @@ async function probeAddress(address) {
 // browsers cannot form a shared circuit through.
 const profile = process.env.RELAY_BOOTSTRAP_PROFILE?.trim() || 'uc-go-peer'
 const discovered =
-  override.length > 0
-    ? override
-    : await discoverAlephBootstrapMultiaddrs({ browserDialableOnly: true, profile })
+  override.length > 0 ? override : await discoverAlephBootstrapMultiaddrs({ browserDialableOnly: true, profile })
 const candidates = [...new Set([...discovered, ...fallback])]
 
 if (candidates.length === 0) {
