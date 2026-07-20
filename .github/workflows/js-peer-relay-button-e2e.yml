@@ -74,7 +74,13 @@ jobs:
           pnpm --dir .relay-button-testkit install --frozen-lockfile --prefer-offline --filter @le-space/playwright...
           pnpm --dir .relay-button-testkit --filter @le-space/playwright build:publish
           mkdir -p js-peer/.relay-button-testkit
+          # build:publish bundles two entry points (index + cleanup-cli), so tsup
+          # code-splits shared code into chunk-*.js that index.js imports. Copy the
+          # whole dist and mark it ESM so those chunks resolve (copying only
+          # index.js left index.mjs importing a missing ./chunk-*.js).
           cp .relay-button-testkit/packages/playwright/dist/index.js js-peer/.relay-button-testkit/index.mjs
+          cp .relay-button-testkit/packages/playwright/dist/chunk-*.js js-peer/.relay-button-testkit/ 2>/dev/null || true
+          printf '{"type":"module"}\n' > js-peer/.relay-button-testkit/package.json
 
       - name: Verify E2E credentials
         run: |

@@ -19,7 +19,7 @@
     "@headlessui/react": "^2.0.1",
     "@helia/delegated-routing-v1-http-api-client": "^4.1.1",
     "@heroicons/react": "^2.1.3",
-    "@le-space/aleph-bootstrap": "^0.6.25",
+    "@le-space/aleph-bootstrap": "^0.6.34",
     "@le-space/browser": "^0.6.25",
     "@le-space/core": "^0.6.25",
     "@le-space/shared-types": "^0.6.25",
