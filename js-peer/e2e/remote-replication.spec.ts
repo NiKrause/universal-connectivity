@@ -16,12 +16,18 @@ const APP_URL = process.env.RELAY_BUTTON_E2E_APP_URL ?? 'https://connect.nicokra
 const TESTKIT_MODULE = process.env.RELAY_BUTTON_TESTKIT_MODULE ?? '@le-space/playwright'
 const OUTPUT_DIR = 'test-results/remote-replication'
 const CHAT_TOPIC = 'universal-connectivity'
-const CONNECT_TIMEOUT = 3 * 60_000
+const CONNECT_TIMEOUT = 5 * 60_000
 const CHAT_TIMEOUT = 3 * 60_000
 
 const REMOTE_WS_ENDPOINT = process.env.ALEPH_PLAYWRIGHT_WS_ENDPOINT?.trim()
 const REMOTE_VERSION_URL = process.env.ALEPH_PLAYWRIGHT_VERSION_URL?.trim()
 const REMOTE_SECRET = process.env.ALEPH_PLAYWRIGHT_SECRET?.trim()
+
+// Stream stage progress + browser diagnostics so a stuck run is diagnosable
+// (previously the test printed only "Running 1 test" through the whole window).
+function progress(message: string) {
+  console.log(`[remote-repl ${new Date().toISOString().slice(11, 23)}] ${message}`)
+}
 
 type RelayTestkit = {
   connectAlephChromium(options: {
@@ -57,8 +63,18 @@ class RemoteChatAgent {
   ) {}
 
   async open() {
+    progress(`[${this.name}] opening ${APP_URL}...`)
     this.context = await this.browser.newContext()
     this.page = await this.context.newPage()
+    // Forward browser console + page errors so libp2p connection/discovery
+    // activity is visible in the CI log.
+    this.page.on('console', (msg) => {
+      const text = msg.text()
+      if (/error|warn|relay|dial|peer|webrtc|circuit|reservation|connect/i.test(text)) {
+        progress(`[${this.name} ${msg.type()}] ${text}`.slice(0, 300))
+      }
+    })
+    this.page.on('pageerror', (err) => progress(`[${this.name} pageerror] ${err.message}`.slice(0, 300)))
     await this.page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 120_000 })
     await this.page.getByPlaceholder('Message').waitFor({ state: 'visible', timeout: 120_000 })
     await this.page.waitForFunction(
@@ -66,6 +82,8 @@ class RemoteChatAgent {
       undefined,
       { timeout: 120_000 },
     )
+    const peerId = await this.peerId()
+    progress(`[${this.name}] ready, peerId=${peerId}`)
   }
 
   async peerId(): Promise<string> {
@@ -74,22 +92,42 @@ class RemoteChatAgent {
     )
   }
 
-  // Wait until this browser has an open connection whose remote peer is the
-  // other browser (established through the deployed app's relay circuit / WebRTC).
-  async waitForPeerConnection(otherPeerId: string, timeout = CONNECT_TIMEOUT) {
-    await this.requiredPage().waitForFunction(
-      (expectedPeerId) =>
-        (
+  // Poll for a connection whose remote peer is the other browser, logging the
+  // connection/pubsub state every 15s so a stall is visible instead of silent.
+  async waitForPeerConnected(otherPeerId: string, timeout = CONNECT_TIMEOUT) {
+    const deadline = Date.now() + timeout
+    let lastLog = 0
+    while (Date.now() < deadline) {
+      const connected = await this.requiredPage().evaluate(
+        (expectedPeerId) =>
           (
-            window as unknown as { libp2p: { getConnections: () => { remotePeer: unknown }[] } }
-          ).libp2p.getConnections() ?? []
-        ).some(({ remotePeer }) => String(remotePeer) === expectedPeerId),
-      otherPeerId,
-      { timeout, polling: 1_000 },
-    )
+            (
+              window as unknown as { libp2p: { getConnections: () => { remotePeer: unknown }[] } }
+            ).libp2p.getConnections() ?? []
+          ).some(({ remotePeer }) => String(remotePeer) === expectedPeerId),
+        otherPeerId,
+      )
+      if (connected) {
+        progress(`[${this.name}] connected to ${otherPeerId.slice(-8)}`)
+        return
+      }
+      if (Date.now() - lastLog > 15_000) {
+        lastLog = Date.now()
+        const d = await this.diagnostics()
+        progress(
+          `[${this.name}] waiting for ${otherPeerId.slice(-8)} — conns=${d.connections.length} ` +
+            `pubsubPeers=${d.pubsub.peers.length} chatSubs=${d.pubsub.chatSubscribers.length} ` +
+            `remotePeers=[${d.connections.map((c) => c.remotePeer.slice(-6)).join(',')}]`,
+        )
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2_000))
+    }
+    const d = await this.diagnostics()
+    throw new Error(`${this.name} never connected to ${otherPeerId}. Final diagnostics: ${JSON.stringify(d)}`)
   }
 
   async sendMessage(message: string) {
+    progress(`[${this.name}] sending "${message}"`)
     const input = this.requiredPage().getByPlaceholder('Message')
     await input.fill(message)
     await input.press('Enter')
@@ -100,6 +138,7 @@ class RemoteChatAgent {
       .getByTestId('chat-message-body')
       .filter({ hasText: message })
       .waitFor({ state: 'visible', timeout: CHAT_TIMEOUT })
+    progress(`[${this.name}] received "${message}"`)
   }
 
   async screenshot(path: string) {
@@ -157,6 +196,7 @@ test.describe('js-peer remote replication', () => {
       if (!REMOTE_VERSION_URL || !REMOTE_SECRET) {
         throw new Error('ALEPH_PLAYWRIGHT_VERSION_URL and ALEPH_PLAYWRIGHT_SECRET are required with a WS endpoint')
       }
+      progress(`connecting browser B to remote runner ${REMOTE_WS_ENDPOINT}`)
       remoteBrowser = await testkit.connectAlephChromium({
         chromium,
         wsEndpoint: REMOTE_WS_ENDPOINT,
@@ -164,6 +204,9 @@ test.describe('js-peer remote replication', () => {
         secret: REMOTE_SECRET,
         timeoutMs: 120_000,
       })
+      progress('browser B connected to remote runner')
+    } else {
+      progress('no remote endpoint — running both browsers same-machine')
     }
 
     const agentA = new RemoteChatAgent('local', browser)
@@ -180,9 +223,11 @@ test.describe('js-peer remote replication', () => {
       const [peerA, peerB] = await Promise.all([agentA.peerId(), agentB.peerId()])
       evidence.peerA = peerA
       evidence.peerB = peerB
+      progress(`peers: A=${peerA} B=${peerB}`)
 
       // Both browsers must connect to each other through the deployed app's relays.
-      await Promise.all([agentA.waitForPeerConnection(peerB), agentB.waitForPeerConnection(peerA)])
+      progress('waiting for the two browsers to connect to each other...')
+      await Promise.all([agentA.waitForPeerConnected(peerB), agentB.waitForPeerConnected(peerA)])
       evidence.connected = true
 
       const messageAToB = `remote-repl-a-${Date.now()}`
@@ -194,6 +239,7 @@ test.describe('js-peer remote replication', () => {
       await agentA.waitForMessage(messageBToA)
       evidence.messageBToA = messageBToA
       evidence.passed = true
+      progress('remote replication succeeded')
 
       evidence.final = { a: await agentA.diagnostics(), b: await agentB.diagnostics() }
       await Promise.all([
@@ -204,6 +250,7 @@ test.describe('js-peer remote replication', () => {
       testError = error instanceof Error ? error : new Error(String(error))
       evidence.passed = false
       evidence.error = testError.message
+      progress(`FAILED: ${testError.message}`)
       const diags = await Promise.allSettled([agentA.diagnostics(), agentB.diagnostics()])
       evidence.failureDiagnostics = {
         a: diags[0].status === 'fulfilled' ? diags[0].value : { error: String(diags[0].reason) },

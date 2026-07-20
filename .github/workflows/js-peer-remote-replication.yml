@@ -132,6 +132,9 @@ jobs:
         with:
           aleph_private_key: ${{ env.ALEPH_VM_PRIVATE_KEY }}
           instance_item_hash: ${{ steps.runner.outputs.instance_item_hash }}
+          # The cleanup CLI ships in @le-space/playwright; pin the published
+          # version that provides the playwright-runner-cleanup bin.
+          testkit_version: '0.6.34'
 
       - name: Upload remote replication evidence
         if: always()
