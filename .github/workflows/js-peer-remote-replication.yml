@@ -10,11 +10,6 @@ name: js-peer remote replication
 # a successful js-peer deploy, or on demand.
 
 on:
-  # TEMPORARY: validate this workflow on its feature branch (workflow_dispatch
-  # only works from the default branch). Remove before merge.
-  push:
-    branches:
-      - feat/js-peer-remote-replication
   workflow_run:
     workflows:
       - js-peer build
@@ -46,7 +41,7 @@ concurrency:
 
 jobs:
   remote-replication:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     env:
