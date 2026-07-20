@@ -92,38 +92,33 @@ class RemoteChatAgent {
     )
   }
 
-  // Poll for a connection whose remote peer is the other browser, logging the
-  // connection/pubsub state every 15s so a stall is visible instead of silent.
-  async waitForPeerConnected(otherPeerId: string, timeout = CONNECT_TIMEOUT) {
+  // universal-connectivity chat is relay-mediated pubsub, NOT a direct
+  // browser-to-browser connection: both browsers join the same relay + chat
+  // topic and gossipsub forwards messages through the relay. So readiness =
+  // "connected to a relay and subscribed to the chat topic", and the actual
+  // replication is proven by the message exchange itself (not a direct dial).
+  async waitForChatReady(timeout = CONNECT_TIMEOUT) {
     const deadline = Date.now() + timeout
     let lastLog = 0
     while (Date.now() < deadline) {
-      const connected = await this.requiredPage().evaluate(
-        (expectedPeerId) =>
-          (
-            (
-              window as unknown as { libp2p: { getConnections: () => { remotePeer: unknown }[] } }
-            ).libp2p.getConnections() ?? []
-          ).some(({ remotePeer }) => String(remotePeer) === expectedPeerId),
-        otherPeerId,
-      )
-      if (connected) {
-        progress(`[${this.name}] connected to ${otherPeerId.slice(-8)}`)
+      const d = await this.diagnostics()
+      if (d.connections.length > 0 && d.pubsub.chatSubscribers.length > 0) {
+        progress(
+          `[${this.name}] chat-ready — relays=${d.connections.length} chatSubs=${d.pubsub.chatSubscribers.length}`,
+        )
         return
       }
       if (Date.now() - lastLog > 15_000) {
         lastLog = Date.now()
-        const d = await this.diagnostics()
         progress(
-          `[${this.name}] waiting for ${otherPeerId.slice(-8)} — conns=${d.connections.length} ` +
-            `pubsubPeers=${d.pubsub.peers.length} chatSubs=${d.pubsub.chatSubscribers.length} ` +
-            `remotePeers=[${d.connections.map((c) => c.remotePeer.slice(-6)).join(',')}]`,
+          `[${this.name}] waiting to be chat-ready — conns=${d.connections.length} ` +
+            `pubsubPeers=${d.pubsub.peers.length} chatSubs=${d.pubsub.chatSubscribers.length}`,
         )
       }
       await new Promise((resolve) => setTimeout(resolve, 2_000))
     }
     const d = await this.diagnostics()
-    throw new Error(`${this.name} never connected to ${otherPeerId}. Final diagnostics: ${JSON.stringify(d)}`)
+    throw new Error(`${this.name} never became chat-ready. Final diagnostics: ${JSON.stringify(d)}`)
   }
 
   async sendMessage(message: string) {
@@ -225,10 +220,11 @@ test.describe('js-peer remote replication', () => {
       evidence.peerB = peerB
       progress(`peers: A=${peerA} B=${peerB}`)
 
-      // Both browsers must connect to each other through the deployed app's relays.
-      progress('waiting for the two browsers to connect to each other...')
-      await Promise.all([agentA.waitForPeerConnected(peerB), agentB.waitForPeerConnected(peerA)])
-      evidence.connected = true
+      // Both browsers join a relay + the chat topic; gossipsub then relays
+      // messages between them (no direct browser-to-browser dial required).
+      progress('waiting for both browsers to be chat-ready...')
+      await Promise.all([agentA.waitForChatReady(), agentB.waitForChatReady()])
+      evidence.ready = true
 
       const messageAToB = `remote-repl-a-${Date.now()}`
       const messageBToA = `remote-repl-b-${Date.now()}`
