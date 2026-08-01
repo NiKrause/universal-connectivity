@@ -26,7 +26,7 @@ on:
       rootfs_item_hash:
         description: Playwright-runner RootFS STORE item hash (built by relay-button)
         required: false
-        default: c392fba3a392a9daa88a44620e0b0f4e5a260ccc3b56853eda8ed02009d8d4f1
+        default: b41c7fe9fe687a22f37f52b52d008a9a924280faec04591ecf47976038f065be
       testkit_ref:
         description: relay-button ref for the @le-space/playwright testkit + runner action
         required: false
@@ -106,7 +106,7 @@ jobs:
         uses: NiKrause/relay-button/.github/actions/aleph-playwright-runner@main
         with:
           aleph_private_key: ${{ env.ALEPH_VM_PRIVATE_KEY }}
-          rootfs_item_hash: ${{ inputs.rootfs_item_hash != '' && inputs.rootfs_item_hash || 'c392fba3a392a9daa88a44620e0b0f4e5a260ccc3b56853eda8ed02009d8d4f1' }}
+          rootfs_item_hash: ${{ inputs.rootfs_item_hash != '' && inputs.rootfs_item_hash || 'b41c7fe9fe687a22f37f52b52d008a9a924280faec04591ecf47976038f065be' }}
           # Prefix must match the janitor's `playwright-<repo>-` scope so leaked
           # VMs are caught by js-peer-aleph-playwright-janitor.yml.
           name: playwright-nikrause-universal-connectivity-${{ github.run_id }}-${{ github.run_attempt }}
