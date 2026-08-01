@@ -1,5 +1,14 @@
 {
   "name": "universal-connectivity-browser",
+  "comments": {
+    "allowScripts": "npm 12 blocks dependency install scripts by default. @ipshipyard/node-datachannel ships no prebuilt binding in its tarball -- without its install script there is no WebRTC in Node at all. Run `npm approve-scripts --allow-scripts-pending` after a dependency bump to refresh this list."
+  },
+  "allowScripts": {
+    "@ipshipyard/node-datachannel": "^0.26.6",
+    "protobufjs": "^7.6.4",
+    "unrs-resolver": "^1.12.2",
+    "fsevents": "^2.3.2"
+  },
   "scripts": {
     "dev": "next dev --experimental-https",
     "dev:e2e": "next dev --hostname 127.0.0.1 --port 4173",
