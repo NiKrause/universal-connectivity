@@ -438,6 +438,10 @@ jobs:
           NEXT_PUBLIC_ALEPH_DOMAIN: ${{ vars.NEXT_PUBLIC_ALEPH_DOMAIN != '' && vars.NEXT_PUBLIC_ALEPH_DOMAIN || inputs.aleph_domain }}
           NEXT_PUBLIC_VM_SSH_PUBLIC_KEY: ${{ vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY != '' && vars.NEXT_PUBLIC_VM_SSH_PUBLIC_KEY || secrets.VM_SSH_PUBLIC_KEY }}
           RELAY_BOOTSTRAP_FALLBACK: ${{ steps.deploy_vm.outputs.browser_bootstrap_multiaddrs_json }}
+          # The browser bootstrap set is webtransport/webrtc-direct only, which
+          # Node cannot dial. Hand the probe set in as well so the resolver can
+          # prove the relay is live over its proxy-wss address.
+          RELAY_BOOTSTRAP_LIVENESS: ${{ steps.deploy_vm.outputs.vm_probe_multiaddrs_json }}
         working-directory: universal-connectivity/js-peer
         run: |
           npm ci
