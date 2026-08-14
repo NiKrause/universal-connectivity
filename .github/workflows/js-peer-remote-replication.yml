@@ -84,9 +84,8 @@ jobs:
           pnpm --dir relay-button install --frozen-lockfile --prefer-offline --filter @le-space/playwright...
           pnpm --dir relay-button --filter @le-space/playwright build:publish
           mkdir -p js-peer/.relay-button-testkit
+          # build:publish is self-contained (--no-splitting), so a single copy works.
           cp relay-button/packages/playwright/dist/index.js js-peer/.relay-button-testkit/index.mjs
-          cp relay-button/packages/playwright/dist/chunk-*.js js-peer/.relay-button-testkit/ 2>/dev/null || true
-          printf '{"type":"module"}\n' > js-peer/.relay-button-testkit/package.json
 
       - name: Verify credentials
         run: |
