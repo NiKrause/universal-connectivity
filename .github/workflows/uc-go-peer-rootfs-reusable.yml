@@ -2,7 +2,12 @@ name: uc-go-peer rootfs reusable
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SHARED_ALEPH_NODE_VERSION: 0.9.8
+  # @le-space/node is installed with --legacy-peer-deps: @libp2p/webrtc depends on
+  # react-native-webrtc, whose react-native peer is not optional, so npm would
+  # otherwise install React Native into a Node deploy tool. Node never loads that
+  # code. Measured for 0.11.0: 413 instead of 590 packages, 303 instead of 469 MB,
+  # and every module of the package loads the same way under both installs.
+  SHARED_ALEPH_NODE_VERSION: 0.11.0
   SHARED_ALEPH_NODE_SOURCE: npm
 
 on:
@@ -350,7 +355,7 @@ jobs:
           cd "$workdir"
           if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
             npm init -y >/dev/null 2>&1
-            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+            npm install --no-save --no-package-lock --legacy-peer-deps @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
           fi
           node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runRootfsMode
 
@@ -428,7 +433,7 @@ jobs:
           cd "$workdir"
           if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
             npm init -y >/dev/null 2>&1
-            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+            npm install --no-save --no-package-lock --legacy-peer-deps @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
           fi
           node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
 
@@ -465,7 +470,7 @@ jobs:
           cd "$workdir"
           if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
             npm init -y >/dev/null 2>&1
-            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+            npm install --no-save --no-package-lock --legacy-peer-deps @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
           fi
           node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
 
@@ -485,7 +490,7 @@ jobs:
           cd "$workdir"
           if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
             npm init -y >/dev/null 2>&1
-            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+            npm install --no-save --no-package-lock --legacy-peer-deps @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
           fi
           node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runSiteMode
 
@@ -507,7 +512,7 @@ jobs:
           cd "${workdir}"
           if [[ "${SHARED_ALEPH_NODE_SOURCE}" != "source" ]]; then
             npm init -y >/dev/null 2>&1
-            npm install --no-save --no-package-lock @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
+            npm install --no-save --no-package-lock --legacy-peer-deps @le-space/node@${{ env.SHARED_ALEPH_NODE_VERSION }}
           fi
           node "${GITHUB_WORKSPACE}/universal-connectivity/.github/scripts/run-shared-aleph-node.mjs" runActionMode
 
