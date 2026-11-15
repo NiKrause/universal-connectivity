@@ -66,6 +66,62 @@ func parseAnnounceAddrs(raw string) ([]multiaddr.Multiaddr, error) {
 	return dedupeMultiaddrs(addrs), nil
 }
 
+// envFlag reads a boolean environment value the way the guest scripts write
+// them: "1" or "true" (any case) is on, anything else is off.
+func envFlag(raw string) bool {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	return value == "1" || value == "true"
+}
+
+// listenAddrStrings is every address the peer listens on. Without IPv6 it
+// leaves out the [::] listeners: go-libp2p announces the global IPv6 address
+// of every interface it listens on, and on Aleph inbound IPv6 does not reach
+// the VM's ports (IPv6 is routed without port forwarding, and SYNs to the
+// relay ports were measured never arriving at the guest), so those addresses
+// would send IPv6 peers to dead ends first.
+func listenAddrStrings(port, wsPort, wssPort string, ipv6 bool) []string {
+	wss := fmt.Sprintf("/tcp/%s/tls/sni/*.%s/ws", wssPort, p2pforge.DefaultForgeDomain)
+	addrs := []string{
+		"/ip4/0.0.0.0/tcp/" + port,
+		"/ip4/0.0.0.0/udp/" + port + "/quic-v1",
+		"/ip4/0.0.0.0/udp/" + port + "/quic-v1/webtransport",
+		"/ip4/0.0.0.0/udp/" + port + "/webrtc-direct",
+	}
+	if ipv6 {
+		addrs = append(addrs,
+			"/ip6/::/tcp/"+port,
+			"/ip6/::/udp/"+port+"/quic-v1",
+			"/ip6/::/udp/"+port+"/quic-v1/webtransport",
+			"/ip6/::/udp/"+port+"/webrtc-direct",
+		)
+	}
+	addrs = append(addrs, "/ip4/0.0.0.0/tcp/"+wsPort+"/ws")
+	if ipv6 {
+		addrs = append(addrs, "/ip6/::/tcp/"+wsPort+"/ws")
+	}
+	addrs = append(addrs, "/ip4/0.0.0.0"+wss)
+	if ipv6 {
+		addrs = append(addrs, "/ip6/::"+wss)
+	}
+	return addrs
+}
+
+// withoutRawIPv6 drops addresses that start with a literal IPv6 address.
+// /dns6 names stay: they resolve to a proxy (2n6.me) that does pass IPv6.
+func withoutRawIPv6(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
+	result := make([]multiaddr.Multiaddr, 0, len(addrs))
+	for _, addr := range addrs {
+		if addr == nil {
+			continue
+		}
+		if protocols := addr.Protocols(); len(protocols) > 0 && protocols[0].Code == multiaddr.P_IP6 {
+			continue
+		}
+		result = append(result, addr)
+	}
+	return result
+}
+
 func dedupeMultiaddrs(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
 	seen := make(map[string]struct{}, len(addrs))
 	result := make([]multiaddr.Multiaddr, 0, len(addrs))
@@ -215,34 +271,27 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	ipv6Enabled := !envFlag(os.Getenv("LIBP2P_DISABLE_IPV6"))
 
 	autoTLSAddrsFactory := certManager.AddressFactory()
 	combinedAddrsFactory := func(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
 		withAnnounce := dedupeMultiaddrs(append(append([]multiaddr.Multiaddr{}, addrs...), announceAddrs...))
-		if autoTLSAddrsFactory == nil {
-			return withAnnounce
+		if autoTLSAddrsFactory != nil {
+			withAnnounce = dedupeMultiaddrs(autoTLSAddrsFactory(withAnnounce))
 		}
-		return dedupeMultiaddrs(autoTLSAddrsFactory(withAnnounce))
+		if !ipv6Enabled {
+			// An announce list written before LIBP2P_DISABLE_IPV6 existed
+			// still carries /ip6 entries; they are as dead as the listeners.
+			withAnnounce = withoutRawIPv6(withAnnounce)
+		}
+		return withAnnounce
 	}
 
 	// Configure libp2p options with AutoTLS
 	opts := []libp2p.Option{
 		libp2p.Identity(privk),
 		libp2p.NATPortMap(),
-		libp2p.ListenAddrStrings(
-			"/ip4/0.0.0.0/tcp/"+*port,
-			"/ip4/0.0.0.0/udp/"+*port+"/quic-v1",
-			"/ip4/0.0.0.0/udp/"+*port+"/quic-v1/webtransport",
-			"/ip4/0.0.0.0/udp/"+*port+"/webrtc-direct",
-			"/ip6/::/tcp/"+*port,
-			"/ip6/::/udp/"+*port+"/quic-v1",
-			"/ip6/::/udp/"+*port+"/quic-v1/webtransport",
-			"/ip6/::/udp/"+*port+"/webrtc-direct",
-			"/ip4/0.0.0.0/tcp/"+*wsPort+"/ws",
-			"/ip6/::/tcp/"+*wsPort+"/ws",
-			fmt.Sprintf("/ip4/0.0.0.0/tcp/"+*wssPort+"/tls/sni/*.%s/ws", p2pforge.DefaultForgeDomain),
-			fmt.Sprintf("/ip6/::/tcp/"+*wssPort+"/tls/sni/*.%s/ws", p2pforge.DefaultForgeDomain),
-		),
+		libp2p.ListenAddrStrings(listenAddrStrings(*port, *wsPort, *wssPort, ipv6Enabled)...),
 		libp2p.ResourceManager(getResourceManager()),
 		libp2p.Transport(webtransport.New),
 		libp2p.Transport(quic.NewTransport),
